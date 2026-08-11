@@ -1,0 +1,219 @@
+*&---------------------------------------------------------------------*
+*& Report Z_EXPORT_G2N_EXCEL
+*&---------------------------------------------------------------------*
+*& This report recreates the G2N validated Excel template
+*& using the abap2xlsx open source project.
+*&---------------------------------------------------------------------*
+REPORT z_export_g2n_excel.
+
+" Core variables for abap2xlsx
+DATA: lo_excel     TYPE REF TO zcl_excel,
+      lo_worksheet TYPE REF TO zcl_excel_worksheet,
+      lo_writer    TYPE REF TO zif_excel_writer.
+
+" Variables for Styles
+DATA: lo_style_bold          TYPE REF TO zcl_excel_style,
+      lo_style_border        TYPE REF TO zcl_excel_style,
+      lo_style_border_b      TYPE REF TO zcl_excel_style,
+      lo_style_green_m_b     TYPE REF TO zcl_excel_style,
+      lo_style_yellow_hdr    TYPE REF TO zcl_excel_style,
+      lo_style_hdr           TYPE REF TO zcl_excel_style,
+      lo_style_bottom_m      TYPE REF TO zcl_excel_style.
+
+" GUIDs for Styles
+DATA: lv_style_bold          TYPE zexcel_cell_style,
+      lv_style_border        TYPE zexcel_cell_style,
+      lv_style_border_b      TYPE zexcel_cell_style,
+      lv_style_green_m_b     TYPE zexcel_cell_style,
+      lv_style_yellow_hdr    TYPE zexcel_cell_style,
+      lv_style_hdr           TYPE zexcel_cell_style,
+      lv_style_bottom_m      TYPE zexcel_cell_style.
+
+" Variables for File download
+DATA: lv_file      TYPE xstring,
+      lv_bytecount TYPE i,
+      lt_file_tab  TYPE solix_tab.
+
+START-OF-SELECTION.
+
+  " 1. Initialization
+  CREATE OBJECT lo_excel.
+  lo_worksheet = lo_excel->get_active_worksheet( ).
+  lo_worksheet->set_title( 'G2N Validated' ).
+
+  " 2. Style Definitions
+  " --- Bold Text (Periods on Top Right)
+  lo_style_bold = lo_excel->add_new_style( ).
+  lo_style_bold->font->bold = abap_true.
+  lo_style_bold->font->name = 'Aptos'.
+  lv_style_bold = lo_style_bold->get_guid( ).
+
+  " --- Thin Border (Employee Status Grid)
+  lo_style_border = lo_excel->add_new_style( ).
+  lo_style_border->borders->allborders->borderstyle = zcl_excel_style_border=>c_border_thin.
+  lv_style_border = lo_style_border->get_guid( ).
+
+  " --- Thin Border with Bold Font
+  lo_style_border_b = lo_excel->add_new_style( ).
+  lo_style_border_b->font->bold = abap_true.
+  lo_style_border_b->font->name = 'Aptos'.
+  lo_style_border_b->borders->allborders->borderstyle = zcl_excel_style_border=>c_border_thin.
+  lv_style_border_b = lo_style_border_b->get_guid( ).
+
+  " --- Green Fill, Medium Borders, Centered, Bold (Merged WT Codes: 0009 & 0011)
+  lo_style_green_m_b = lo_excel->add_new_style( ).
+  lo_style_green_m_b->font->bold = abap_true.
+  lo_style_green_m_b->font->name = 'Aptos'.
+  lo_style_green_m_b->fill->filltype = zcl_excel_style_fill=>c_fill_solid.
+  lo_style_green_m_b->fill->fgcolor-rgb = zcl_excel_style_color=>c_green. 
+  lo_style_green_m_b->borders->allborders->borderstyle = zcl_excel_style_border=>c_border_medium.
+  lo_style_green_m_b->alignment->horizontal = zcl_excel_style_alignment=>c_horizontal_center.
+  lo_style_green_m_b->alignment->vertical = zcl_excel_style_alignment=>c_vertical_center.
+  lv_style_green_m_b = lo_style_green_m_b->get_guid( ).
+
+  " --- Yellow Header Fill, Wrap Text, Centered, Bold (Deviation % Column)
+  lo_style_yellow_hdr = lo_excel->add_new_style( ).
+  lo_style_yellow_hdr->font->bold = abap_true.
+  lo_style_yellow_hdr->font->name = 'Aptos'.
+  lo_style_yellow_hdr->fill->filltype = zcl_excel_style_fill=>c_fill_solid.
+  lo_style_yellow_hdr->fill->fgcolor-rgb = zcl_excel_style_color=>c_yellow.
+  lo_style_yellow_hdr->alignment->wraptext = abap_true.
+  lo_style_yellow_hdr->alignment->horizontal = zcl_excel_style_alignment=>c_horizontal_center.
+  lo_style_yellow_hdr->alignment->vertical = zcl_excel_style_alignment=>c_vertical_center.
+  lv_style_yellow_hdr = lo_style_yellow_hdr->get_guid( ).
+
+  " --- Default Header Style, Wrap Text, Centered, Bold
+  lo_style_hdr = lo_excel->add_new_style( ).
+  lo_style_hdr->font->bold = abap_true.
+  lo_style_hdr->font->name = 'Aptos'.
+  lo_style_hdr->alignment->wraptext = abap_true.
+  lo_style_hdr->alignment->horizontal = zcl_excel_style_alignment=>c_horizontal_center.
+  lo_style_hdr->alignment->vertical = zcl_excel_style_alignment=>c_vertical_center.
+  lv_style_hdr = lo_style_hdr->get_guid( ).
+
+  " --- Medium Bottom Border (for 'Example per WT' above merged WTs)
+  lo_style_bottom_m = lo_excel->add_new_style( ).
+  lo_style_bottom_m->font->bold = abap_true.
+  lo_style_bottom_m->borders->down->borderstyle = zcl_excel_style_border=>c_border_medium.
+  lv_style_bottom_m = lo_style_bottom_m->get_guid( ).
+
+  " 3. Top Left: Employee Status Block
+  lo_worksheet->set_cell( ip_row = 1 ip_column = 'A' ip_value = 'Employee Status' ip_style = lv_style_border_b ).
+  lo_worksheet->set_merge( ip_row = 1 ip_column_start = 'A' ip_column_end = 'C' ).
+  lo_worksheet->set_cell( ip_row = 2 ip_column = 'A' ip_value = 'Active'    ip_style = lv_style_border ).
+  lo_worksheet->set_cell( ip_row = 2 ip_column = 'B' ip_value = '1312'      ip_style = lv_style_border ).
+  lo_worksheet->set_cell( ip_row = 3 ip_column = 'A' ip_value = 'Inactive'  ip_style = lv_style_border ).
+  lo_worksheet->set_cell( ip_row = 3 ip_column = 'B' ip_value = '7'         ip_style = lv_style_border ).
+  lo_worksheet->set_cell( ip_row = 4 ip_column = 'A' ip_value = 'Withdrawn' ip_style = lv_style_border ).
+  lo_worksheet->set_cell( ip_row = 4 ip_column = 'B' ip_value = '38'        ip_style = lv_style_border ).
+  lo_worksheet->set_cell( ip_row = 5 ip_column = 'B' ip_value = '1357'      ip_style = lv_style_border ).
+
+  " 4. Top Right: PY Periods
+  lo_worksheet->set_cell( ip_row = 1 ip_column = 'E' ip_value = 'Previous PY Period' ip_style = lv_style_bold ).
+  lo_worksheet->set_cell( ip_row = 1 ip_column = 'F' ip_value = '2026-06-01' ). 
+  lo_worksheet->set_cell( ip_row = 2 ip_column = 'E' ip_value = 'Current PY Period'  ip_style = lv_style_bold ).
+  lo_worksheet->set_cell( ip_row = 2 ip_column = 'F' ip_value = '2026-07-01' ).
+
+  " 5. Merged Headers for Wage Types
+  lo_worksheet->set_cell( ip_row = 3 ip_column = 'G' ip_value = 'Example per WT' ip_style = lv_style_bottom_m ).
+  lo_worksheet->set_merge( ip_row = 3 ip_column_start = 'G' ip_column_end = 'I' ).
+
+  lo_worksheet->set_cell( ip_row = 4 ip_column = 'G' ip_value = '0009' ip_style = lv_style_green_m_b ).
+  lo_worksheet->set_merge( ip_row = 4 ip_column_start = 'G' ip_column_end = 'I' ).
+
+  lo_worksheet->set_cell( ip_row = 4 ip_column = 'J' ip_value = '0011' ip_style = lv_style_green_m_b ).
+  lo_worksheet->set_merge( ip_row = 4 ip_column_start = 'J' ip_column_end = 'L' ).
+
+  " 6. Row 6 WTs labels
+  lo_worksheet->set_cell( ip_row = 6 ip_column = 'G' ip_value = '0009' ).
+  lo_worksheet->set_cell( ip_row = 6 ip_column = 'H' ip_value = '0009' ).
+  lo_worksheet->set_cell( ip_row = 6 ip_column = 'I' ip_value = '0009' ).
+  lo_worksheet->set_cell( ip_row = 6 ip_column = 'J' ip_value = '0011' ).
+  lo_worksheet->set_cell( ip_row = 6 ip_column = 'K' ip_value = '0011' ).
+  lo_worksheet->set_cell( ip_row = 6 ip_column = 'L' ip_value = '0011' ).
+
+  " 7. Row 7 Table Headers (Mapping Line Breaks)
+  lo_worksheet->set_cell( ip_row = 7 ip_column = 'A' ip_value = 'Firstname Surname'  ip_style = lv_style_hdr ).
+  lo_worksheet->set_cell( ip_row = 7 ip_column = 'B' ip_value = 'Employee No.'       ip_style = lv_style_hdr ).
+  lo_worksheet->set_cell( ip_row = 7 ip_column = 'C' ip_value = 'Company Code'       ip_style = lv_style_hdr ).
+  lo_worksheet->set_cell( ip_row = 7 ip_column = 'D' ip_value = 'Employee Sub Group' ip_style = lv_style_hdr ).
+  lo_worksheet->set_cell( ip_row = 7 ip_column = 'E' ip_value = 'Employee Status'    ip_style = lv_style_hdr ).
+  lo_worksheet->set_cell( ip_row = 7 ip_column = 'F' ip_value = 'Termination Date'   ip_style = lv_style_hdr ).
+  lo_worksheet->set_cell( ip_row = 7 ip_column = 'G' ip_value = 'Previous Gross - WTs detail' ip_style = lv_style_hdr ).
+  lo_worksheet->set_cell( ip_row = 7 ip_column = 'H' ip_value = 'Current Gross - WTs detail'  ip_style = lv_style_hdr ).
+  lo_worksheet->set_cell( ip_row = 7 ip_column = 'I' ip_value = 'Deviation Current Vs Previous' && cl_abap_char_utilities=>cr_lf && '%' ip_style = lv_style_yellow_hdr ).
+  lo_worksheet->set_cell( ip_row = 7 ip_column = 'J' ip_value = 'Previous Gross - WTs detail' ip_style = lv_style_hdr ).
+  lo_worksheet->set_cell( ip_row = 7 ip_column = 'K' ip_value = 'Current Gross - WTs detail'  ip_style = lv_style_hdr ).
+  lo_worksheet->set_cell( ip_row = 7 ip_column = 'L' ip_value = 'Deviation Current Vs Previous' && cl_abap_char_utilities=>cr_lf && '%' ip_style = lv_style_yellow_hdr ).
+
+  " Apply width to avoid collapsing the text
+  lo_worksheet->get_column( 'A' )->set_width( 20 ).
+  lo_worksheet->get_column( 'G' )->set_width( 15 ).
+  lo_worksheet->get_column( 'H' )->set_width( 15 ).
+  lo_worksheet->get_column( 'I' )->set_width( 15 ).
+  lo_worksheet->get_column( 'J' )->set_width( 15 ).
+  lo_worksheet->get_column( 'L' )->set_width( 15 ).
+
+  " 8. Row 8 Table Data (First Employee)
+  lo_worksheet->set_cell( ip_row = 8 ip_column = 'A' ip_value = 'Abel Garcia Nicolas' ).
+  lo_worksheet->set_cell( ip_row = 8 ip_column = 'B' ip_value = '50518481' ).
+  lo_worksheet->set_cell( ip_row = 8 ip_column = 'C' ip_value = '1091' ).
+  lo_worksheet->set_cell( ip_row = 8 ip_column = 'D' ip_value = '1A' ).
+  lo_worksheet->set_cell( ip_row = 8 ip_column = 'E' ip_value = 'Active' ).
+  lo_worksheet->set_cell( ip_row = 8 ip_column = 'F' ip_value = '2958465' ).
+  lo_worksheet->set_cell( ip_row = 8 ip_column = 'G' ip_value = '973.98' ).
+  lo_worksheet->set_cell( ip_row = 8 ip_column = 'H' ip_value = '973.98' ).
+  lo_worksheet->set_cell( ip_row = 8 ip_column = 'I' ip_value = '0' ).
+  lo_worksheet->set_cell( ip_row = 8 ip_column = 'J' ip_value = '38.96' ).
+
+  " 9. Row 9 Table Data (Second Employee)
+  lo_worksheet->set_cell( ip_row = 9 ip_column = 'A' ip_value = 'Abelardo Vecino' ).
+  lo_worksheet->set_cell( ip_row = 9 ip_column = 'B' ip_value = '11010155' ).
+  lo_worksheet->set_cell( ip_row = 9 ip_column = 'C' ip_value = '1091' ).
+  lo_worksheet->set_cell( ip_row = 9 ip_column = 'D' ip_value = '1A' ).
+  lo_worksheet->set_cell( ip_row = 9 ip_column = 'E' ip_value = 'Active' ).
+  lo_worksheet->set_cell( ip_row = 9 ip_column = 'G' ip_value = '1386.24' ).
+  lo_worksheet->set_cell( ip_row = 9 ip_column = 'H' ip_value = '1386.24' ).
+  lo_worksheet->set_cell( ip_row = 9 ip_column = 'I' ip_value = '0' ).
+  lo_worksheet->set_cell( ip_row = 9 ip_column = 'J' ip_value = '0€' ).
+
+  " 10. Row 10 Table Data (Third Employee)
+  lo_worksheet->set_cell( ip_row = 10 ip_column = 'A' ip_value = 'Adrian Algaba Perez' ).
+  lo_worksheet->set_cell( ip_row = 10 ip_column = 'B' ip_value = '50562226' ).
+  lo_worksheet->set_cell( ip_row = 10 ip_column = 'C' ip_value = '1091' ).
+  lo_worksheet->set_cell( ip_row = 10 ip_column = 'D' ip_value = '1A' ).
+  lo_worksheet->set_cell( ip_row = 10 ip_column = 'E' ip_value = 'Active' ).
+  lo_worksheet->set_cell( ip_row = 10 ip_column = 'G' ip_value = '1188.19' ).
+  lo_worksheet->set_cell( ip_row = 10 ip_column = 'H' ip_value = '1188.19' ).
+  lo_worksheet->set_cell( ip_row = 10 ip_column = 'I' ip_value = '0' ).
+  lo_worksheet->set_cell( ip_row = 10 ip_column = 'J' ip_value = '0€' ).
+
+  " 11. Create Excel file and trigger standard GUI download
+  CREATE OBJECT lo_writer TYPE zcl_excel_writer_2007.
+  lv_file = lo_writer->write_file( lo_excel ).
+
+  " Convert XString to Binary 
+  CALL FUNCTION 'SCMS_XSTRING_TO_BINARY'
+    EXPORTING
+      buffer        = lv_file
+    IMPORTING
+      output_length = lv_bytecount
+    TABLES
+      binary_tab    = lt_file_tab.
+
+  cl_gui_frontend_services=>gui_download(
+    EXPORTING
+      bin_filesize              = lv_bytecount
+      filename                  = 'C:\TEMP\G2N_Report.xlsx'
+      filetype                  = 'BIN'
+    CHANGING
+      data_tab                  = lt_file_tab
+    EXCEPTIONS
+      OTHERS                    = 1 ).
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ELSE.
+    MESSAGE 'File C:\TEMP\G2N_Report.xlsx successfully generated.' TYPE 'I'.
+  ENDIF.
