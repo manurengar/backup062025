@@ -55,3 +55,43 @@ LOOP AT lt_wage_types INTO DATA(ls_wt).
   lv_col = lv_col + 1. " Advance to next column for the next Wage Type group
 
 ENDLOOP.
+
+
+_-----------------------------
+
+* (Assuming the styles lv_guid_prev, lv_guid_curr, and lv_guid_dev 
+* are already instantiated as they were in the previous example)
+
+DATA: lv_header_text TYPE string,
+      lv_style_guid  TYPE zexcel_cell_style.
+
+* Loop directly through your new table structure
+LOOP AT lt_mapping INTO DATA(ls_map).
+
+  " 1. Set the Wage Type in Row 6 using the direct column position
+  lo_worksheet->set_cell( 
+    ip_column = ls_map-col_pos 
+    ip_row    = 6 
+    ip_value  = ls_map-lgart ).
+
+  " 2. Determine text and style for Row 7 dynamically
+  CASE ls_map-col_pos MOD 3.
+    WHEN 1. " E.g., Column 7, 10, 13
+      lv_header_text = 'Previous Gross - WTs detail'.
+      lv_style_guid  = lv_guid_prev.
+    WHEN 2. " E.g., Column 8, 11, 14
+      lv_header_text = 'Current Gross - WTs detail'.
+      lv_style_guid  = lv_guid_curr.
+    WHEN 0. " E.g., Column 9, 12, 15
+      lv_header_text = 'Deviation Current Vs Previous'.
+      lv_style_guid  = lv_guid_dev.
+  ENDCASE.
+
+  " 3. Set the Header Text and Style in Row 7
+  lo_worksheet->set_cell( 
+    ip_column = ls_map-col_pos 
+    ip_row    = 7 
+    ip_value  = lv_header_text
+    ip_style  = lv_style_guid ).
+
+ENDLOOP.
