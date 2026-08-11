@@ -50,6 +50,7 @@ START-OF-SELECTION.
 
   " --- Thin Border (Employee Status Grid)
   lo_style_border = lo_excel->add_new_style( ).
+  CREATE OBJECT lo_style_border->borders->allborders. " Explicit initialization added
   lo_style_border->borders->allborders->borderstyle = zcl_excel_style_border=>c_border_thin.
   lv_style_border = lo_style_border->get_guid( ).
 
@@ -57,6 +58,7 @@ START-OF-SELECTION.
   lo_style_border_b = lo_excel->add_new_style( ).
   lo_style_border_b->font->bold = abap_true.
   lo_style_border_b->font->name = 'Aptos'.
+  CREATE OBJECT lo_style_border_b->borders->allborders. " Explicit initialization added
   lo_style_border_b->borders->allborders->borderstyle = zcl_excel_style_border=>c_border_thin.
   lv_style_border_b = lo_style_border_b->get_guid( ).
 
@@ -66,6 +68,7 @@ START-OF-SELECTION.
   lo_style_green_m_b->font->name = 'Aptos'.
   lo_style_green_m_b->fill->filltype = zcl_excel_style_fill=>c_fill_solid.
   lo_style_green_m_b->fill->fgcolor-rgb = zcl_excel_style_color=>c_green. 
+  CREATE OBJECT lo_style_green_m_b->borders->allborders. " Explicit initialization added
   lo_style_green_m_b->borders->allborders->borderstyle = zcl_excel_style_border=>c_border_medium.
   lo_style_green_m_b->alignment->horizontal = zcl_excel_style_alignment=>c_horizontal_center.
   lo_style_green_m_b->alignment->vertical = zcl_excel_style_alignment=>c_vertical_center.
