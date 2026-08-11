@@ -1,0 +1,4139 @@
+class CL_FDT_XL_SPREADSHEET definition
+  public
+  inheriting from CL_FDT_XL_DOCUMENT
+  final
+  create public .
+
+public section.
+
+  interfaces IF_FDT_DOC_SPREADSHEET .
+
+  methods CONSTRUCTOR
+    importing
+      value(DOCUMENT_NAME) type STRING
+      value(XDOCUMENT) type XSTRING
+      !MIME_TYPE type STRING optional
+    raising
+      CX_FDT_EXCEL_CORE .
+  class-methods GET_LANGU_TEXT
+    importing
+      !IV_LANGU type CHAR1
+    returning
+      value(RV_TEXT) type STRING .
+  methods GET_CELL_VALUE_FROM_WORKSHEET
+    importing
+      !SHEET_NAME type STRING
+      !CELL_COORDINATE type STRING
+    returning
+      value(CELL_VALUE) type STRING .
+protected section.
+*"* protected components of class cl_fdt_xl_spreadsheet
+*"* do not include other source files here!!!
+
+  types:
+    begin of ooxml_worksheet.
+  types name        type string.
+  types id          type string.
+  types location    type string.
+  types end of ooxml_worksheet .
+  types:
+    ooxml_worksheets type standard table of ooxml_worksheet .
+  types:
+    begin of struc_named_cell.
+  types name        type string.
+  types sheet_name  type string.
+  types cell        type string.
+  types format      type string.
+  types end of struc_named_cell .
+  types:
+    tab_named_cells type standard table of struc_named_cell .
+  types:
+    begin of struc_named_range.
+      types name        type string.
+      types sheet_name  type string.
+      types start_cell  type string.
+      types end_cell    type string.
+  types end of struc_named_range .
+  types:
+    tab_named_ranges type standard table of struc_named_range .
+  types:
+    begin of t_struc_numfmtid.
+      types id          type i.
+      types formatCode  type string.
+    types end of t_struc_numfmtid .
+  types:
+    t_numfmtids type standard table of t_struc_numfmtid .
+private section.
+
+  types:
+    BEGIN OF TY_SHARED_STRING_BUFFER,
+         STR_VAL TYPE STRING,
+         POS     TYPE STRING,
+         END OF TY_SHARED_STRING_BUFFER .
+  types:
+    TH_SHARED_STRING_BUFFER TYPE HASHED TABLE OF TY_SHARED_STRING_BUFFER WITH UNIQUE KEY STR_VAL .
+
+  constants DEFAULT_SHEET_NAME type STRING value 'Sheet1' ##NO_TEXT.
+  constants GC_RELS_EXTN type STRING value '.rels' ##NO_TEXT.
+  constants GC_RELS_PATH type STRING value '_rels/' ##NO_TEXT.
+  data DATEFORMAT1904 type ABAP_BOOL .
+  data NAMED_CELLS type TAB_NAMED_CELLS .
+  data NAMED_RANGES type TAB_NAMED_RANGES .
+  data NUMFMTIDS type T_NUMFMTIDS .
+  data:
+    mt_shared_strings TYPE STANDARD TABLE OF string .
+  data WORKBOOK_FILENAME type STRING .
+  data WORKBOOK_FOLDER type STRING .
+  data WORKBOOK_RELATIONS type T_POD_RELATIONS .
+  data WORKSHEETS type OOXML_WORKSHEETS .
+  data MTH_SHARED_STRINGS type TH_SHARED_STRING_BUFFER .
+
+  methods CREATE_WORKSHEET_ROW_NTL
+    importing
+      !IT_DATA type STANDARD TABLE
+      !IS_ROW type ANY
+      !IV_ROW_INDEX type SY-TABIX
+      !IT_COLUMN type IF_FDT_DOC_SPREADSHEET=>T_COLUMN optional
+      !IT_COLUMN_DESCRIPTION type ABAP_COMPONENT_TAB
+      !IO_SHEET_XML_DOCUMENT type ref to IF_IXML_DOCUMENT
+      !IO_SHEET_DATA_NODE type ref to IF_IXML_NODE
+      !IV_IS_ALV_DOCUMENT type ABAP_BOOL default ABAP_FALSE
+    changing
+      !CV_ROW_NUMBER type INT4
+      !CV_GROUP_NUMBER_MAX type INT4 .
+  methods CREATE_WORKSHEET_ROW
+    importing
+      !IS_ROW type ANY
+      !IV_ROW_NUMBER type INT4
+      !IT_COLUMN type IF_FDT_DOC_SPREADSHEET=>T_COLUMN optional
+      !IT_COLUMN_DESCRIPTION type ABAP_COMPONENT_TAB
+      !IO_SHEET_XML_DOCUMENT type ref to IF_IXML_DOCUMENT
+      !IO_SHEET_DATA_NODE type ref to IF_IXML_NODE
+      !IV_CALL_TYPE type I
+      !IV_IS_ALV_DOCUMENT type ABAP_BOOL default ABAP_FALSE
+    changing
+      !CV_GROUP_NUMBER type INT4
+      !CV_GROUP_NUMBER_MAX type INT4 .
+  methods CREATE_CELL_ELEMENTS_HEADER
+    importing
+      !IO_ROW_ELEMENT type ref to IF_IXML_ELEMENT
+      !IT_COLUMN type IF_FDT_DOC_SPREADSHEET=>T_COLUMN optional
+      !IT_COLUMN_DESCRIPTION type ABAP_COMPONENT_TAB
+      !IO_SHEET_XML_DOCUMENT type ref to IF_IXML_DOCUMENT
+      !IV_CALL_TYPE type I
+      !IV_IS_ALV_DOCUMENT type ABAP_BOOL default ABAP_FALSE .
+  methods CREATE_CELL_ELEMENTS
+    importing
+      !IS_ROW type ANY
+      !IO_ROW_ELEMENT type ref to IF_IXML_ELEMENT
+      !IV_ROW_NUMBER type STRING
+      !IT_COLUMN type IF_FDT_DOC_SPREADSHEET=>T_COLUMN optional
+      !IT_COLUMN_DESCRIPTION type ABAP_COMPONENT_TAB
+      !IO_SHEET_XML_DOCUMENT type ref to IF_IXML_DOCUMENT
+      !IV_CALL_TYPE type I
+      !IV_IS_ALV_DOCUMENT type ABAP_BOOL default ABAP_FALSE .
+  class-methods CREATE_BLANK_DOCUMENT_STRUCT
+    importing
+      !WORKSHEET_NAME type STRING default DEFAULT_SHEET_NAME
+      !META_TITLE type STRING optional
+      !META_SUBJECT type STRING optional
+      !META_DESCRIPTION type STRING optional
+      !META_KEYWORDS type STRING optional
+      !IS_ALV_DOCUMENT type ABAP_BOOL default ABAP_FALSE
+      !IV_CALL_TYPE type I optional
+      !IV_SHEET_NAME type STRING default 'Sheet1'
+    returning
+      value(XBLANK_DOCUMENT) type XSTRING .
+  class-methods CREATE_DOCUMENT
+    importing
+      !NAME type STRING default IF_FDT_DOC_SPREADSHEET=>DEFAULT_FILENAME
+      !ITAB type ref to DATA
+      !COLUMNS type IF_FDT_DOC_SPREADSHEET=>T_COLUMN optional
+      !IS_ALV_DOCUMENT type ABAP_BOOL default ABAP_FALSE
+      !COLUMNS_AUX type IF_FDT_DOC_SPREADSHEET=>T_COLUMN optional
+      !ITAB_AUX_COL_DESC type ref to DATA optional
+      !IV_CALL_TYPE type I
+      !IT_DT_MAP_COL type IF_FDT_DOC_SPREADSHEET=>T_COLUMN optional
+      !IT_DT_MAP_COL_DESC type ref to DATA optional
+      !IV_SHEET_NAME type STRING optional
+    returning
+      value(XDOCUMENT) type XSTRING
+    raising
+      CX_FDT_EXCEL_CORE .
+  methods CLEAR_WORKSHEET_SHEETDATA
+    importing
+      !SHEET_XML_DOCUMENT type ref to IF_IXML_DOCUMENT
+    returning
+      value(SHEETDATA_NODE) type ref to IF_IXML_NODE .
+  methods CONVERT_CELL_VALUE_BY_NUMFMT
+    importing
+      !CELL_VALUE type STRING
+      !NUMBER_FORMAT type STRING
+    returning
+      value(FORMATTED_VALUE) type STRING .
+  methods CONVERT_COLUMN_TO_I
+    importing
+      !COLUMN type STRING
+    returning
+      value(COL_NUMBER) type I .
+  methods CONVERT_DEC_TIME_TO_HHMMSS
+    importing
+      !DEC_TIME_STRING type STRING
+    returning
+      value(TIME) type T .
+  methods CONVERT_I_TO_COLUMN
+    importing
+      !INT_VAL type I
+    returning
+      value(COLUMN) type STRING .
+  methods CONVERT_LONG_TO_DATE
+    importing
+      !DATE_STRING type STRING
+    returning
+      value(DATE) type D .
+  methods CONVERT_SER_VAL_TO_DATE_TIME
+    importing
+      !SERIAL_VALUE_STRING type STRING
+    exporting
+      !DATE type D
+      !TIME type T .
+  methods EXTRACT_COL_FROM_A1_STYLE
+    importing
+      !INPUT type STRING
+    returning
+      value(COLUMN) type STRING .
+  methods GET_CELLXFS
+    exporting
+      !CELLXFS type STANDARD TABLE .
+  methods GET_CELL_STYLE_ID
+    importing
+      !XML_DOC type ref to IF_IXML_DOCUMENT
+      !CELL_COORDINATE type STRING
+    returning
+      value(STYLE_ID) type I .
+  methods GET_CELL_VALUE
+    importing
+      !SHEET_NAME type STRING
+      !CELL_COORDINATE type STRING
+    returning
+      value(CELL_VALUE) type STRING .
+  methods GET_CELL_VALUE_BY_XMLDOC_SHRDS
+    importing
+      !CELL_COORDINATE type STRING
+      !SHARED_STRINGS type STANDARD TABLE
+      !XML_DOC type ref to IF_IXML_DOCUMENT
+    returning
+      value(CELL_VALUE) type STRING .
+  methods GET_COL_AND_ROW_FROM_A1_STYLE
+    importing
+      !COORDINATE type STRING
+    exporting
+      !COLUMN_NUMBER type I
+      !ROW_NUMBER type I .
+  methods GET_COL_FROM_A1_STYLE
+    importing
+      !COORDINATE type STRING
+    returning
+      value(COLUMN_NUMBER) type I .
+  methods GET_ITAB_FOR_ALV_BY_XMLDOC
+    importing
+      !RANGE_START type STRING
+      !RANGE_END type STRING
+      !XML_DOC type ref to IF_IXML_DOCUMENT
+    returning
+      value(ITAB) type ref to DATA .
+  methods GET_ITAB_FOR_ALV_UPDATE
+    returning
+      value(ITAB) type ref to DATA .
+  methods GET_ITAB_FROM_SHEET
+    importing
+      !WORKSHEET_NAME type STRING
+      !IV_CALLER type I optional
+      !IV_GET_LANGUAGE type ABAP_BOOL optional
+    returning
+      value(ITAB) type ref to DATA .
+  methods GET_MAPPING
+    returning
+      value(MAPPING) type ref to CL_FDT_DOC_MAPPING .
+  methods GET_NAMED_CELL
+    importing
+      !CELL_NAME type STRING
+    returning
+      value(CELL_VALUE) type STRING .
+  methods GET_NAMED_CELLS
+    returning
+      value(NAMED_CELLS) like NAMED_CELLS .
+  methods GET_NAMED_RANGES
+    returning
+      value(NAMED_RANGES) like NAMED_RANGES .
+  methods GET_NAMED_RANGE_ITAB
+    importing
+      !RANGE type STRING
+    returning
+      value(ITAB) type ref to DATA .
+  methods GET_OR_CREATE_INDEX_SHARED_STR
+    importing
+      !STRING type STRING
+    returning
+      value(INDEX) type I .
+  methods GET_RANGE_ITAB_FROM_XMLDOC
+    importing
+      !RANGE_START type STRING
+      !RANGE_END type STRING
+      !XML_DOC type ref to IF_IXML_DOCUMENT
+    returning
+      value(ITAB) type ref to DATA .
+  methods GET_SHARED_STRINGS
+    exporting
+      value(STRINGS) type STANDARD TABLE .
+  methods GET_WORKSHEET_BY_ID
+    importing
+      !WORKSHEET_ID type STRING
+    returning
+      value(XSHEET) type XSTRING .
+  methods GET_WORKSHEET_BY_NAME
+    importing
+      !WORKSHEET_NAME type STRING
+    returning
+      value(XSHEET) type XSTRING .
+  methods GET_WORKSHEET_NAMES
+    exporting
+      !WORKSHEET_NAMES type STANDARD TABLE .
+  methods INIT_SHARED_STRINGS_FILE .
+  methods LOAD_DEFINED_NAMES .
+  methods LOAD_NUMFMTIDS .
+  methods LOAD_SHARED_STRINGS .
+  methods LOAD_WORKBOOK .
+  methods LOAD_WORKSHEETS .
+  methods OVERWRITE_WORKSHEET_BY_ID
+    importing
+      !WORKSHEET_ID type STRING
+      !XSHEET type XSTRING .
+  methods OVERWRITE_WORKSHEET_BY_NAME
+    importing
+      !WORKSHEET_NAME type STRING
+      !XSHEET type XSTRING .
+  methods SET_CELL_VALUE_BY_XMLDOC
+    importing
+      !VALUE type ref to DATA
+      !CELL_COORDINATE type STRING
+    changing
+      !XML_DOC type ref to IF_IXML_DOCUMENT .
+  methods SET_HELP_DT_SHEETDATA
+    importing
+      !SHEET_XML_DOCUMENT type ref to IF_IXML_DOCUMENT .
+  methods SET_HELP_SIM_SHEETDATA
+    importing
+      !SHEET_XML_DOCUMENT type ref to IF_IXML_DOCUMENT .
+  methods SET_MAPPING
+    importing
+      !MAPPING type ref to CL_FDT_DOC_MAPPING .
+  methods SET_NAMED_CELL_VALUE
+    importing
+      !CELL_NAME type STRING
+      !CELL_VALUE type STRING .
+  methods SET_NAMED_RANGE_VALUES
+    importing
+      !RANGE_NAME type STRING
+      !ITAB type ref to DATA .
+  methods SET_SHARED_STRINGS
+    importing
+      !SHARED_STRINGS type STANDARD TABLE optional .
+  methods SET_WORKSHEET_COLS
+    importing
+      !SHEET_XML_DOCUMENT type ref to IF_IXML_DOCUMENT
+      !IS_ALV_DOCUMENT type ABAP_BOOL default ABAP_FALSE
+      !COLUMN_DESCRIPTION_TAB type ABAP_COMPONENT_TAB
+      !IV_COLUMN_DECTAB type ABAP_BOOL default ABAP_FALSE
+      !IV_CALL_TYPE type I optional .
+  methods SET_WORKSHEET_DIMENSION
+    importing
+      !SHEET_XML_DOCUMENT type ref to IF_IXML_DOCUMENT
+      !DIMENSION type STRING .
+  methods SET_WORKSHEET_SHEETDATA
+    importing
+      !SHEET_XML_DOCUMENT type ref to IF_IXML_DOCUMENT
+      !COLUMNS type IF_FDT_DOC_SPREADSHEET=>T_COLUMN optional
+      !IS_ALV_DOCUMENT type ABAP_BOOL default ABAP_FALSE
+      !ITAB type ref to DATA
+      !IV_CALL_TYPE type I
+      !IV_COLUMN_DECTAB type ABAP_BOOL default ABAP_FALSE .
+  methods STORE_WORKBOOK_RELATIONS .
+  methods SET_WORKSHEET_FORMATPR
+    importing
+      !SHEET_XML_DOCUMENT type ref to IF_IXML_DOCUMENT
+      !OUTLINELEVEL type STRING .
+  methods SET_WORKSHEET_WRAPTEXT
+    importing
+      !SHEET_XML_DOCUMENT type ref to IF_IXML_DOCUMENT .
+  methods INSERT_EMPTY_WORKSHEET_ROW
+    importing
+      !IO_SHEET_XML_DOCUMENT type ref to IF_IXML_DOCUMENT
+      !IO_SHEET_DATA_NODE type ref to IF_IXML_NODE
+    changing
+      !CV_ROW type INT4 .
+  methods CREATE_WORKSHEET_ROW_BASE
+    importing
+      !IO_SHEET_XML_DOCUMENT type ref to IF_IXML_DOCUMENT
+      !IV_ROW type INT4
+    returning
+      value(RO_ROW_ELEMENT) type ref to IF_IXML_ELEMENT .
+  methods SET_SHARED_STRING_BUFFER
+    importing
+      !IV_SHARED_STRING type STRING
+    returning
+      value(RV_CELL_CONTENT_INT) type STRING .
+ENDCLASS.
+
+
+
+CLASS CL_FDT_XL_SPREADSHEET IMPLEMENTATION.
+
+
+method CLEAR_WORKSHEET_SHEETDATA.
+
+  data:
+        worksheet_root_node     type ref to if_ixml_node,
+        worksheet_root_element  type ref to if_ixml_element,
+        sheetdata_element       type ref to if_ixml_element,
+        sheetdata_collection    type ref to if_ixml_node_collection,
+        sheetdata_iterator      type ref to if_ixml_node_iterator,
+        row_node                type ref to if_ixml_node.
+
+
+* Enabling iXML support
+  type-pools: ixml.
+  class cl_ixml definition load.
+
+* Get the root node and element ( <worksheet> )
+  worksheet_root_node ?= sheet_xml_document->get_first_child( ).
+  worksheet_root_element ?= worksheet_root_node->query_interface( ixml_iid_element ).
+
+* Checking wether cols node exist
+  sheetdata_element = worksheet_root_element->find_from_name_ns( name = 'sheetData' uri = if_fdt_xl_types=>ns_ooxml_ssheet_main ).
+  if sheetdata_element is initial.
+    " <sheetData> is obligatory... leaving
+    exit.
+  endif.
+
+  " Check for <sheetData> childs
+  sheetdata_collection = sheetdata_element->get_elements_by_tag_name_ns( name = 'row' uri = if_fdt_xl_types=>ns_ooxml_ssheet_main ).
+  if sheetdata_collection is not initial.
+    sheetdata_iterator = sheetdata_collection->create_iterator( ).
+    row_node = sheetdata_iterator->get_next( ).
+    while row_node is not initial.
+      row_node->remove_node( ).
+      row_node = sheetdata_iterator->get_next( ).
+    endwhile.
+  endif.
+  sheetdata_node ?= sheetdata_element.
+endmethod.
+
+
+method CONSTRUCTOR.
+  call method super->constructor
+    exporting
+      iv_document_name = document_name
+      iv_xdocument     = xdocument
+      iv_mime_type     = mime_type.
+
+  me->load_workbook( ).       " Loading workbook relations, workbook filename, workbook folder
+  me->load_worksheets( ).     " Loading worksheets
+  me->load_numfmtids( ).      " Loading standard and custom number formats
+  me->load_defined_names( ).  " Loading the defined cell or range names in workbook
+endmethod. "#EC CI_VALPAR.
+
+
+method CONVERT_CELL_VALUE_BY_NUMFMT.
+  data:
+        clean_format type string.
+
+  formatted_value = ''.
+  clean_format = number_format.
+  replace regex '"[^"]*"' in clean_format with ''.
+  replace regex '\[Red\]' in clean_format with ''.
+
+
+  if cl_abap_matcher=>matches( pattern = '.*(y+|m+|d+|h+|s+).*' text = clean_format ) = abap_true.
+    " Contains a date or time... checking both
+    data:
+          date type d,
+          time type t.
+    convert_ser_val_to_date_time(
+      exporting
+        serial_value_string = cell_value
+      importing
+        date                = date
+        time                = time ).
+    if date ne '00000000'.
+      " Make it fancy and ISO conform
+      data:
+            year(4)   type c,
+            month(2)  type c,
+            day(2)    type c.
+      year  = date(4).
+      month = date+4(2).
+      day   = date+6(2).
+
+      formatted_value = formatted_value && year && '-' && month && '-' && day.
+    endif.
+    if time ne '000000'.
+      " Make it fancy
+      data:
+            hour(2) type c,
+            min(2)  type c,
+            sec(2)  type c.
+      hour = time(2).
+      min  = time+2(2).
+      sec  = time+4(2).
+      formatted_value = formatted_value && ` ` && hour && ':' && min && ':' && sec .
+    endif.
+  endif.
+
+  if formatted_value = ''.
+    formatted_value = cell_value.
+  endif.
+endmethod.
+
+
+method CONVERT_COLUMN_TO_I.
+  data:
+      input       type string,
+      cc          type c value '',
+      strl        type i,
+      cnt         type i value 0,
+      ascii_val   type i,
+      ascii_val_a type i.
+
+input = column.
+ascii_val_a = cl_abap_conv_out_ce=>uccp( 'A' ).
+translate input to upper case.
+strl = strlen( input ) - 1.
+
+while strl >= 0.
+  cc = input+cnt(1).
+  ascii_val = cl_abap_conv_out_ce=>uccp( cc ).
+  if cc >= 'A' and cc <= 'Z'.
+    col_number = col_number + ( ascii_val - ascii_val_a + 1 ) * 26 ** strl .
+    cnt = cnt + 1.
+    strl = strl - 1 .
+  else.
+    col_number = 0.
+    exit.
+  endif.
+endwhile.
+
+
+endmethod.
+
+
+method CONVERT_DEC_TIME_TO_HHMMSS.
+  data:
+        dec_time   type decfloat16,
+        hour       type i,
+        hour_str   type string,
+        minute     type i,
+        minute_str type string,
+        second     type decfloat16.
+
+  try.
+    dec_time = dec_time_string.
+  catch cx_root.
+    " Cannot convert string to dec float... leaving undone
+    time = dec_time_string.
+    exit.
+  endtry.
+
+  dec_time = frac( dec_time ). " Make sure that only the fraction is considered
+
+  " Thanks to Excel, we have to round at this point to be compliant
+  dec_time = round( val = dec_time dec = 15 ).
+
+  dec_time = dec_time * 24.
+  hour = floor( dec_time ).
+  dec_time = ( dec_time - hour ) * 60.
+  minute = floor( dec_time ).
+  second = round( val = ( ( dec_time - minute ) * 60 ) dec = 3 ).
+  if second >= 60.
+    second = 0.
+    minute = minute + 1.
+  endif.
+
+  if hour < 10.
+    hour_str = '0' && hour.
+  else.
+    hour_str = hour.
+  endif.
+  cl_abap_string_utilities=>del_trailing_blanks( changing str = hour_str ).
+
+  if minute < 10.
+    minute_str = '0' && minute.
+  else.
+    minute_str = minute.
+  endif.
+  cl_abap_string_utilities=>del_trailing_blanks( changing str = minute_str ).
+
+  time = hour_str && minute_str &&  second .
+endmethod.
+
+
+method CONVERT_I_TO_COLUMN.
+  data:
+        cc          type sychar02 value '',
+        frag        type f,
+        comp        type i value 1,
+        c_i_val     type i,
+        c_x_val(2)  type x,
+        input       type i.
+
+  if int_val is initial or int_val < 1.
+    exit.
+  endif.
+
+  if int_val = 1.
+    column = 'A'.
+    exit.
+  endif.
+
+  column = ''.
+  frag = int_val.
+
+  while frag > 1 .
+    input = floor( frag ).
+    c_i_val = input mod 26.
+    if c_i_val = 0.
+      c_i_val = 26.
+      input = input - 25.
+    endif.
+    c_x_val = c_i_val + cl_abap_conv_out_ce=>uccp( 'A' ) - 1.
+    cc = cl_abap_conv_in_ce=>uccp( c_x_val ).
+    column = cc && column.
+    frag = input / 26 .
+  endwhile.
+endmethod.
+
+
+method CONVERT_LONG_TO_DATE.
+  data num_days type i.
+
+  num_days = floor( date_string ).
+
+  if me->dateformat1904 = abap_false.
+  " 1900 based
+    date = '18991231'.
+    if date_string > 59.
+      " Microsoft thinks the year 1900 is a leap year... it is not!
+      date = date + num_days - 1.
+    else.
+      " From 1899-12-31 to 1900-02-28 Microsoft guesses the correct date
+      date = date + num_days.
+    endif.
+  " 1904 based
+  else.
+    date = '19040101'.
+    date = date + num_days.
+  endif.
+endmethod.
+
+
+method CONVERT_SER_VAL_TO_DATE_TIME.
+  data:
+        date_str  type string,
+        time_str  type string,
+        date_time type decfloat34.
+
+  try.
+    date_time = serial_value_string.
+  catch cx_root.
+    "Not able to interpret as dec value
+    exit.
+  endtry.
+  date_str = floor( date_time ).
+  if date_str ne '0'.
+    date = convert_long_to_date( date_str ).
+  endif.
+
+  time_str = frac( date_time ).
+  if time_str ne '0'.
+    time = convert_dec_time_to_hhmmss( time_str ).
+  endif.
+endmethod.
+
+
+METHOD create_blank_document_struct.
+
+  DATA: lo_blank_doc   TYPE REF TO cl_abap_zip,
+        lo_converter   TYPE REF TO cl_abap_conv_out_ce.
+
+  DATA: xml           TYPE string,
+        timestamp     TYPE timestamp,
+        utc           TYPE string,
+        utc_str       TYPE string,
+        lv_sheet_name TYPE string.
+
+* Create the empty zip package
+  CREATE OBJECT lo_blank_doc.
+  IF iv_sheet_name IS SUPPLIED AND iv_sheet_name IS INITIAL.
+    lv_sheet_name = 'Sheet1'.
+  ELSE.
+    lv_sheet_name = iv_sheet_name.
+  ENDIF.
+
+* Create the obligatory [Content_Types].xml
+  xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`. "#EC NOTEXT
+  xml = xml && `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">`. "#EC NOTEXT
+  xml = xml && `<Override PartName="/xl/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>`. "#EC NOTEXT
+  xml = xml && `<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>`. "#EC NOTEXT
+  xml = xml && `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>`. "#EC NOTEXT
+  xml = xml && `<Default Extension="xml" ContentType="application/xml"/>`. "#EC NOTEXT
+  xml = xml && `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>`. "#EC NOTEXT
+  xml = xml && `<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>`. "#EC NOTEXT
+  xml = xml && `<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`. "#EC NOTEXT
+  xml = xml && `<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`. "#EC NOTEXT
+  xml = xml && `<Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`. "#EC NOTEXT
+  xml = xml && `<Override PartName="/xl/worksheets/sheet4.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`. "#EC NOTEXT
+  xml = xml && `<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>`. "#EC NOTEXT
+  xml = xml && `<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>`. "#EC NOTEXT
+  xml = xml && `</Types>`.                                  "#EC NOTEXT
+  lo_converter = cl_abap_conv_out_ce=>create( ).
+  lo_converter->write( data = xml ).
+  lo_blank_doc->add( name = '[Content_Types].xml' content = lo_converter->get_buffer( ) ). "#EC NOTEXT
+  FREE lo_converter.
+
+* Create the obligatory _rels/.rels
+  xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`. "#EC NOTEXT
+  xml = xml && `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`. "#EC NOTEXT
+  xml = xml && `<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>`. "#EC NOTEXT
+  xml = xml && `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>`. "#EC NOTEXT
+  xml = xml && `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`. "#EC NOTEXT
+  lo_converter = cl_abap_conv_out_ce=>create( ).
+  lo_converter->write( data = xml ).
+  lo_blank_doc->add( name = '_rels/.rels' content = lo_converter->get_buffer( ) ). "#EC NOTEXT
+  FREE lo_converter.
+
+* Create the obligatory docProps/app.xml
+  xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`. "#EC NOTEXT
+  xml = xml && `<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" `. "#EC NOTEXT
+  xml = xml && `xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">`. "#EC NOTEXT
+  xml = xml && `<Application>SAP NetWeaver Application Server</Application>`. "#EC NOTEXT
+  xml = xml && `<DocSecurity>0</DocSecurity>`.              "#EC NOTEXT
+  xml = xml && `<TitlesOfParts>`.                           "#EC NOTEXT
+  xml = xml && `<vt:vector size="2" baseType="lpstr"><vt:lpstr>` && lv_sheet_name && `</vt:lpstr>`. "#EC NOTEXT
+  xml = xml && `<vt:lpstr>HELP</vt:lpstr></vt:vector>`.     "#EC NOTEXT
+  xml = xml && `</TitlesOfParts>`.                          "#EC NOTEXT
+  xml = xml && `<Company>SAP</Company>`.                    "#EC NOTEXT
+  xml = xml && `<AppVersion>7.1000</AppVersion>`.           "#EC NOTEXT
+  xml = xml && `</Properties>`.                             "#EC NOTEXT
+  lo_converter = cl_abap_conv_out_ce=>create( ).
+  lo_converter->write( data = xml ).
+  lo_blank_doc->add( name = 'docProps/app.xml' content = lo_converter->get_buffer( ) ). "#EC NOTEXT
+  FREE lo_converter.
+
+* Create the obligatory docProps/core.xml
+  xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`. "#EC NOTEXT
+  xml = xml && `<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" `. "#EC NOTEXT
+  xml = xml && `xmlns:dc="http://purl.org/dc/elements/1.1/" `. "#EC NOTEXT
+  xml = xml && `xmlns:dcterms="http://purl.org/dc/terms/" `. "#EC NOTEXT
+  xml = xml && `xmlns:dcmitype="http://purl.org/dc/dcmitype/" `. "#EC NOTEXT
+  xml = xml && `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">`. "#EC NOTEXT
+  xml = xml && `<dc:title>` && meta_title && `</dc:title>`. "#EC NOTEXT
+  xml = xml && `<dc:subject>` && meta_subject && `</dc:subject>`. "#EC NOTEXT
+  xml = xml && `<dc:creator>` && sy-uname && `</dc:creator>`. "#EC NOTEXT
+  xml = xml && `<cp:keywords>` && meta_keywords && `</cp:keywords>`. "#EC NOTEXT
+  xml = xml && `<dc:description>` && meta_description && `</dc:description>`. "#EC NOTEXT
+  GET TIME STAMP FIELD timestamp. " Get current UTC
+  utc = timestamp.
+  CONCATENATE utc+0(4) '-' utc+4(2) '-' utc+6(2) 'T' utc+8(2) ':' utc+10(2) ':' utc+12(2) 'Z'  INTO utc_str. "#EC NOTEXT
+  xml = xml && `<dcterms:created xsi:type="dcterms:W3CDTF">` && utc_str && `</dcterms:created>`. "#EC NOTEXT
+  xml = xml && `<dcterms:modified xsi:type="dcterms:W3CDTF">` && utc_str && `</dcterms:modified>`. "#EC NOTEXT
+  xml = xml && `</cp:coreProperties>`.                      "#EC NOTEXT
+  lo_converter = cl_abap_conv_out_ce=>create( ).
+  lo_converter->write( data = xml ).
+  lo_blank_doc->add( name = 'docProps/core.xml' content = lo_converter->get_buffer( ) ). "#EC NOTEXT
+  FREE lo_converter.
+
+* Create the obligatory xl/_rels/workbook.xml.rels
+  xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`. "#EC NOTEXT
+  xml = xml && `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`. "#EC NOTEXT
+  IF iv_call_type EQ if_fdt_doc_spreadsheet=>gc_call_simulation.
+    xml = xml && `<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>`. "#EC NOTEXT
+    xml = xml && `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>`. "#EC NOTEXT
+    xml = xml && `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>`. "#EC NOTEXT
+    xml = xml && `<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/>`. "#EC NOTEXT
+    xml = xml && `<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>`. "#EC NOTEXT
+  ELSEIF iv_call_type EQ if_fdt_doc_spreadsheet=>gc_call_dec_table.
+    xml = xml && `<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>`. "#EC NOTEXT
+    xml = xml && `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>`. "#EC NOTEXT
+    xml = xml && `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>`. "#EC NOTEXT
+    xml = xml && `<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/>`. "#EC NOTEXT
+    xml = xml && `<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet4.xml"/>`. "#EC NOTEXT
+    xml = xml && `<Relationship Id="rId6" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>`. "#EC NOTEXT
+  ELSE.
+    xml = xml && `<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>`. "#EC NOTEXT
+    xml = xml && `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>`. "#EC NOTEXT
+    xml = xml && `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>`. "#EC NOTEXT
+    xml = xml && `<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>`. "#EC NOTEXT
+  ENDIF.
+  xml = xml && `</Relationships>`.                          "#EC NOTEXT
+  lo_converter = cl_abap_conv_out_ce=>create( ).
+  lo_converter->write( data = xml ).
+  lo_blank_doc->add( name = 'xl/_rels/workbook.xml.rels' content = lo_converter->get_buffer( ) ). "#EC NOTEXT
+  FREE lo_converter.
+
+* Create the obligatory xl/worksheets/sheet1.xml
+  xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`. "#EC NOTEXT
+  xml = xml && `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">`. "#EC NOTEXT
+  xml = xml && `<dimension ref="A1"/>`.                     "#EC NOTEXT
+  xml = xml && `<sheetViews><sheetView tabSelected="1" workbookViewId="0"/></sheetViews>`. "#EC NOTEXT
+  xml = xml && `<sheetFormatPr defaultRowHeight="15"/>`.    "#EC NOTEXT
+  xml = xml && `<sheetData/>`.                              "#EC NOTEXT
+  xml = xml && `<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>`. "#EC NOTEXT
+  xml = xml && `</worksheet>`.                              "#EC NOTEXT
+  lo_converter = cl_abap_conv_out_ce=>create( ).
+  lo_converter->write( data = xml ).
+  lo_blank_doc->add( name = 'xl/worksheets/sheet1.xml' content = lo_converter->get_buffer( ) ). "#EC NOTEXT
+  FREE lo_converter.
+
+* Create the obligatory xl/worksheets/sheet2.xml
+  xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`. "#EC NOTEXT
+  xml = xml && `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">`. "#EC NOTEXT
+  xml = xml && `<dimension ref="A1"/>`.                     "#EC NOTEXT
+  "xml = xml && `<sheetViews><sheetView workbookViewId="0"></sheetView></sheetViews>`. "#EC NOTEXT
+  xml = xml && `<sheetViews><sheetView workbookViewId="0"><selection activeCell="B1" sqref="B1" /></sheetView></sheetViews>`. "#EC NOTEXT
+  xml = xml && `<sheetFormatPr defaultRowHeight="15"/>`.    "#EC NOTEXT
+  xml = xml && `<sheetData/>`.                              "#EC NOTEXT
+  xml = xml && `<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>`. "#EC NOTEXT
+  xml = xml && `</worksheet>`.                              "#EC NOTEXT
+  lo_converter = cl_abap_conv_out_ce=>create( ).
+  lo_converter->write( data = xml ).
+  lo_blank_doc->add( name = 'xl/worksheets/sheet2.xml' content = lo_converter->get_buffer( ) ). "#EC NOTEXT
+  FREE lo_converter.
+
+* Create the obligatory xl/worksheets/sheet3.xml
+  CASE iv_call_type.
+    WHEN if_fdt_doc_spreadsheet=>gc_call_dec_table.
+      xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`. "#EC NOTEXT
+      xml = xml && `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">`. "#EC NOTEXT
+      xml = xml && `<dimension ref="A1"/>`.                 "#EC NOTEXT
+      " xml = xml && `<sheetViews><sheetView tabSelected="1" workbookViewId="0"/></sheetViews>`. "#EC NOTEXT
+      xml = xml && `<sheetViews><sheetView workbookViewId="0"><selection activeCell="B1" sqref="B1" /></sheetView></sheetViews>`. "#EC NOTEXT
+      xml = xml && `<sheetFormatPr defaultRowHeight="15"/>`. "#EC NOTEXT
+      xml = xml && `<sheetData/>`.                          "#EC NOTEXT
+      xml = xml && `<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>`. "#EC NOTEXT
+      xml = xml && `</worksheet>`.                          "#EC NOTEXT
+      lo_converter = cl_abap_conv_out_ce=>create( ).
+      lo_converter->write( data = xml ).
+      lo_blank_doc->add( name = 'xl/worksheets/sheet3.xml' content = lo_converter->get_buffer( ) ). "#EC NOTEXT
+      FREE lo_converter.
+    WHEN if_fdt_doc_spreadsheet=>gc_call_simulation.
+      "Mapping Sheet
+      xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`. "#EC NOTEXT
+      xml = xml && `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">`. "#EC NOTEXT
+      xml = xml && `<dimension ref="A1"/>`.                 "#EC NOTEXT
+      xml = xml && `<sheetViews><sheetView workbookViewId="0"><selection activeCell="B1" sqref="B1" /></sheetView></sheetViews>`. "#EC NOTEXT
+      xml = xml && `<sheetFormatPr defaultRowHeight="15"/>`. "#EC NOTEXT
+      xml = xml && `<sheetData/>`.                          "#EC NOTEXT
+      xml = xml && `<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>`. "#EC NOTEXT
+      xml = xml && `</worksheet>`.                          "#EC NOTEXT
+      lo_converter = cl_abap_conv_out_ce=>create( ).
+      lo_converter->write( data = xml ).
+      lo_blank_doc->add( name = 'xl/worksheets/sheet3.xml' content = lo_converter->get_buffer( ) ). "#EC NOTEXT
+      FREE lo_converter.
+    WHEN OTHERS.
+  ENDCASE.
+
+* Create the obligatory xl/worksheets/sheet4.xml
+* Only in case of decision table create the mapping sheet as 4th sheet
+  CASE iv_call_type.
+    WHEN if_fdt_doc_spreadsheet=>gc_call_dec_table.
+      "Mapping Sheet for decision table
+      xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`. "#EC NOTEXT
+      xml = xml && `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">`. "#EC NOTEXT
+      xml = xml && `<dimension ref="A1"/>`.                 "#EC NOTEXT
+      xml = xml && `<sheetViews><sheetView workbookViewId="0"><selection activeCell="B1" sqref="B1" /></sheetView></sheetViews>`. "#EC NOTEXT
+      xml = xml && `<sheetFormatPr defaultRowHeight="15"/>`. "#EC NOTEXT
+      xml = xml && `<sheetData/>`.                          "#EC NOTEXT
+      xml = xml && `<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>`. "#EC NOTEXT
+      xml = xml && `</worksheet>`.                          "#EC NOTEXT
+      lo_converter = cl_abap_conv_out_ce=>create( ).
+      lo_converter->write( data = xml ).
+      lo_blank_doc->add( name = 'xl/worksheets/sheet4.xml' content = lo_converter->get_buffer( ) ). "#EC NOTEXT
+      FREE lo_converter.
+    WHEN OTHERS.
+  ENDCASE.
+
+
+* Create the obligatory xl/sharedStrings.xml
+  xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`. "#EC NOTEXT
+  xml = xml && `<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"></sst>`. "#EC NOTEXT
+  lo_converter = cl_abap_conv_out_ce=>create( ).
+  lo_converter->write( data = xml ).
+  lo_blank_doc->add( name = 'xl/sharedStrings.xml' content = lo_converter->get_buffer( ) ). "#EC NOTEXT
+  FREE lo_converter.
+
+* Create the obligatory xl/styles.xml
+  xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`. "#EC NOTEXT
+  xml = xml && `<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">`. "#EC NOTEXT
+  xml = xml && `<fonts count="2">`.                         "#EC NOTEXT
+  xml = xml && `<font><sz val="11"/><color theme="1"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font>`. "#EC NOTEXT
+  xml = xml && `<font><b/><sz val="11"/><color theme="1"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font>`. "#EC NOTEXT
+  xml = xml && `</fonts>`.                                  "#EC NOTEXT
+  xml = xml && `<fills>`.                                   "#EC NOTEXT
+  xml = xml && `<fill><patternFill patternType="none"/></fill>`. "#EC NOTEXT
+  xml = xml && `<fill><patternFill patternType="gray125" /></fill>`. "#EC NOTEXT
+  "xml = xml && `<fill><patternFill patternType="solid"><fgColor theme="0" tint="-0.14999847407452621" /><bgColor indexed="64"/></patternFill></fill>`. "#EC NOTEXT
+  xml = xml && `<fill><patternFill patternType="solid"><fgColor rgb="FFDBD5BF" /></patternFill></fill>`. "#EC NOTEXT
+  xml = xml && `<fill><patternFill patternType="solid"><fgColor rgb="FFE2EBF1" /></patternFill></fill>`. "#EC NOTEXT
+  xml = xml && `<fill><patternFill patternType="solid"><fgColor rgb="FFF3E9BE" /></patternFill></fill>`. "#EC NOTEXT
+  xml = xml && `<fill><patternFill patternType="solid"><fgColor rgb="FFEDF4F8" /></patternFill></fill>`. "#EC NOTEXT
+  xml = xml && `<fill><patternFill patternType="solid"><fgColor theme="9" tint="0.59999389629810485" /><bgColor indexed="64"/></patternFill></fill>`. "#EC NOTEXT
+  xml = xml && `<fill><patternFill patternType="solid"><fgColor rgb="FFFC6868" /><bgColor indexed="64"/></patternFill></fill>`. "#EC NOTEXT
+  xml = xml && `<fill><patternFill patternType="solid"><fgColor theme="4" tint="0.59999389629810485" /><bgColor indexed="64"/></patternFill></fill>`. "#EC NOTEXT
+  xml = xml && `<fill><patternFill patternType="solid"><fgColor theme="6" tint="0.59999389629810485" /><bgColor indexed="64"/></patternFill></fill>`. "#EC NOTEXT
+  xml = xml && `<fill><patternFill patternType="solid"><fgColor rgb="FFFFFF00" /><bgColor indexed="64"/></patternFill></fill>`. "#EC NOTEXT
+  xml = xml && `<fill><patternFill patternType="solid"><fgColor rgb="FFFF3300" /><bgColor indexed="64"/></patternFill></fill>`. "#EC NOTEXT
+  xml = xml && `<fill><patternFill patternType="solid"><fgColor rgb="FF92D050" /><bgColor indexed="64"/></patternFill></fill>`. "#EC NOTEXT
+  xml = xml && `</fills>`.                                  "#EC NOTEXT
+  xml = xml && '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'. "#EC NOTEXT
+  xml = xml && '<border><left style="thin"><color rgb="FFFFFFFF" /></left><right style="thin"><color rgb="FFFFFFFF" /></right>'. "#EC NOTEXT
+  xml = xml && '<top style="thin"><color rgb="FFFFFFFF" /></top><bottom style="thin"><color rgb="FFFFFFFF" /></bottom><diagonal /></border>'. "#EC NOTEXT
+  xml = xml && '</borders>'.                                "#EC NOTEXT
+  xml = xml && `<cellStyleXfs>`.                            "#EC NOTEXT
+  xml = xml && `<xf numFmtId="49" fontId="0" fillId="0" borderId="0"/>`. "#EC NOTEXT
+  xml = xml && `<xf numFmtId="49" applyProtection="0" fontId="1" fillId="2" borderId="1" applyFont="0"/>`. "#EC NOTEXT
+  xml = xml && `<xf numFmtId="49" applyProtection="0" fontId="1" fillId="3" borderId="1" applyFont="0"/>`. "#EC NOTEXT
+  xml = xml && `<xf numFmtId="49" applyProtection="0" fontId="1" fillId="4" borderId="1" applyFont="0"/>`. "#EC NOTEXT
+  xml = xml && `<xf numFmtId="49" applyProtection="0" fontId="1" fillId="5" borderId="1" applyFont="0"/>`. "#EC NOTEXT
+  xml = xml && `</cellStyleXfs>`.                           "#EC NOTEXT
+  IF is_alv_document = abap_true.
+    xml = xml && `<cellXfs>`.                               "#EC NOTEXT
+    xml = xml && `<xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0"/>`. "#EC NOTEXT
+    xml = xml && `<xf numFmtId="49" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>`. "#EC NOTEXT
+    xml = xml && `<xf numFmtId="49" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" />`. "#EC NOTEXT
+    xml = xml && `<xf numFmtId="49" fontId="1" fillId="3" borderId="1" xfId="0" applyFont="1" />`. "#EC NOTEXT
+    xml = xml && `<xf numFmtId="49" fontId="1" fillId="4" borderId="1" xfId="0" applyFont="1" />`. "#EC NOTEXT
+    xml = xml && `<xf numFmtId="49" fontId="1" fillId="5" borderId="1" xfId="0" applyFont="1" />`. "#EC NOTEXT
+    xml = xml && `<xf numFmtId="49" fontId="1" fillId="6" borderId="1" xfId="0" applyFont="1" />`. "#EC NOTEXT
+    xml = xml && `<xf numFmtId="49" fontId="1" fillId="7" borderId="1" xfId="0" applyFont="1" />`. "#EC NOTEXT
+    xml = xml && `<xf numFmtId="49" fontId="1" fillId="8" borderId="1" xfId="0" applyFont="1" />`. "#EC NOTEXT
+    xml = xml && `<xf numFmtId="49" fontId="1" fillId="9" borderId="1" xfId="0" applyFont="1" />`. "#EC NOTEXT
+    xml = xml && `<xf numFmtId="49" fontId="1" fillId="10" borderId="1" xfId="0" applyFont="1" />`. "#EC NOTEXT
+    xml = xml && `<xf numFmtId="49" fontId="1" fillId="11" borderId="1" xfId="0" applyFont="1" />`. "#EC NOTEXT
+    xml = xml && `<xf numFmtId="49" fontId="1" fillId="12" borderId="1" xfId="0" applyFont="1" />`. "#EC NOTEXT
+    xml = xml && `</cellXfs>`.                              "#EC NOTEXT
+  ELSE.
+    xml = xml && `<cellXfs count="2"><xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="49" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1"applyFill="1" /></cellXfs>`. "#EC NOTEXT
+  ENDIF.
+  xml = xml && `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>`. "#EC NOTEXT
+  xml = xml && `<dxfs count="0"/><tableStyles count="0" defaultTableStyle="TableStyleMedium9" defaultPivotStyle="PivotStyleLight16"/>`. "#EC NOTEXT
+  "xml = xml && '<colors><mruColors><color rgb="FFC6FBC6" /></mruColors></colors>'.
+  xml = xml && `</styleSheet>`.                             "#EC NOTEXT
+  lo_converter = cl_abap_conv_out_ce=>create( ).
+  lo_converter->write( data = xml ).
+  lo_blank_doc->add( name = 'xl/styles.xml' content = lo_converter->get_buffer( ) ). "#EC NOTEXT
+  FREE lo_converter.
+
+* Create the obligatory xl/workbook.xml
+  xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`. "#EC NOTEXT
+  xml = xml && `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">`. "#EC NOTEXT
+  xml = xml && `<fileVersion appName="xl" lastEdited="1" lowestEdited="1" rupBuild="4505"/>`. "#EC NOTEXT
+  xml = xml && `<workbookPr filterPrivacy="1" defaultThemeVersion="124226"/>`. "#EC NOTEXT
+  xml = xml && `<bookViews><workbookView xWindow="240" yWindow="105" windowWidth="14805" windowHeight="8010"/></bookViews>`. "#EC NOTEXT
+  xml = xml && `<sheets>`.                                  "#EC NOTEXT
+*  xml = xml && `<sheet name="` && worksheet_name && `" sheetId="1" r:id="rId1"/>`. "#EC NOTEXT
+  xml = xml && `<sheet name= "` && lv_sheet_name && `" sheetId="1" r:id="rId1"/>`. "#EC NOTEXT
+  xml = xml && `<sheet name= "` && 'Input Help'(020) && `" sheetId="2" r:id="rId2"/>`. "#EC NOTEXT
+  CASE iv_call_type.
+    WHEN if_fdt_doc_spreadsheet=>gc_call_dec_table.
+      xml = xml && `<sheet name= "` && 'Column Details'(021) && `" sheetId="3" r:id="rId3"/>`. "#EC NOTEXT
+      xml = xml && `<sheet name= "` && 'Column Alias Mapping'(022) && `" sheetId="4" r:id="rId4"/>`. "#EC NOTEXT
+    WHEN if_fdt_doc_spreadsheet=>gc_call_simulation.
+      xml = xml && `<sheet name= "` && 'Column Alias Mapping'(022) && `" sheetId="3" r:id="rId3"/>`. "#EC NOTEXT
+    WHEN OTHERS.
+  ENDCASE.
+
+  xml = xml && `</sheets>`.                                 "#EC NOTEXT
+  xml = xml && `<calcPr calcId="124519"/>`.                 "#EC NOTEXT
+  xml = xml && `</workbook>`.                               "#EC NOTEXT
+  lo_converter = cl_abap_conv_out_ce=>create( ).
+  lo_converter->write( data = xml ).
+  lo_blank_doc->add( name = 'xl/workbook.xml' content = lo_converter->get_buffer( ) ). "#EC NOTEXT
+  FREE lo_converter.
+
+  xblank_document = lo_blank_doc->save( ).
+ENDMETHOD.
+
+
+  METHOD create_cell_elements.
+
+    DATA: lv_index TYPE i,
+          ls_column_description LIKE LINE OF it_column_description,
+          ls_column TYPE if_fdt_doc_spreadsheet=>s_column,
+          lo_cell_element TYPE REF TO if_ixml_element,    " <c> = cell
+          lo_cell_value_element TYPE REF TO if_ixml_element,
+          lv_column_type TYPE REF TO cl_abap_typedescr,
+          lv_cell_content_int TYPE string,
+          lv_cell_content_string  TYPE string,
+          lv_text TYPE REF TO if_ixml_text.
+
+    FIELD-SYMBOLS: <la_status> TYPE any,
+                   <la_type> TYPE any,
+                   <la_color> TYPE string,
+                   <la_msg_type> TYPE any,
+                   <la_cell> TYPE any.
+
+    LOOP AT it_column_description INTO ls_column_description.
+      lv_index = sy-tabix.
+      ASSIGN COMPONENT lv_index OF STRUCTURE is_row TO <la_cell>. "#EC CI_BOX_OK
+      lo_cell_element = io_sheet_xml_document->create_element_ns( 'c' ).
+      lo_cell_element->set_attribute_ns( name = 'r' value = convert_i_to_column( sy-tabix ) && iv_row_number ).
+      IF iv_call_type EQ if_fdt_doc_spreadsheet=>gc_call_trace.  " Set the color of the Rows in Trace Excel
+        ASSIGN COMPONENT 2 OF STRUCTURE is_row TO <la_type>. "#EC CI_BOX_OK
+        ASSIGN COMPONENT 3 OF STRUCTURE is_row TO <la_status>. "#EC CI_BOX_OK
+        IF <la_type> EQ 'Trace'(004) OR <la_type> EQ 'Lean Trace'(006). "#EC NOTEXT
+          lo_cell_element->set_attribute_ns( name = 's' value = '6'  ).  " Pink                                 "#EC NOTEXT
+        ELSEIF <la_status> EQ 'EXCEPTION'(005) OR <la_status> EQ 'Exception'(085). "#EC NOTEXT
+          lo_cell_element->set_attribute_ns( name = 's' value = '7'  ).  " Red                                  "#EC NOTEXT
+        ELSEIF <la_type> EQ 'Function'(001) AND ( <la_status> EQ 'STARTED'(002)  OR <la_status> EQ 'FINISHED'(003) OR
+                                                    <la_status> EQ 'Started'(083)  OR <la_status> EQ 'Finished'(084) ). "#EC NOTEXT
+          lo_cell_element->set_attribute_ns( name = 's' value = '9'  ).  " Blue                                 "#EC NOTEXT
+        ELSEIF <la_type> NE 'Function' AND ( <la_status> EQ 'STARTED'(002)  OR <la_status> EQ 'FINISHED'(003) OR
+                                               <la_status> EQ 'Started'(083)  OR <la_status> EQ 'Finished'(084) ). "#EC NOTEXT
+          lo_cell_element->set_attribute_ns( name = 's' value = '8'  ).  " Green
+        ENDIF.
+      ELSEIF iv_call_type EQ if_fdt_doc_spreadsheet=>gc_call_new_lean_trace.  " Set the color of the Rows in Trace Excel
+        ASSIGN COMPONENT 4 OF STRUCTURE is_row TO <la_color>.   "Color assigned
+        CASE <la_color>.
+          WHEN cl_fdt_wd_lean_trace_helper=>gc_color_root.
+            lo_cell_element->set_attribute_ns( name = 's' value = '6'  ).  " Pink  "#EC NOTEXT
+          WHEN cl_fdt_wd_lean_trace_helper=>gc_color_positive.
+            lo_cell_element->set_attribute_ns( name = 's' value = '8'  ).  " Green  "#EC NOTEXT
+          WHEN cl_fdt_wd_lean_trace_helper=>gc_color_negative.
+            lo_cell_element->set_attribute_ns( name = 's' value = '7'  ).  " Red  "#EC NOTEXT
+        ENDCASE.
+
+      ELSEIF iv_call_type EQ if_fdt_doc_spreadsheet=>gc_call_message_area.  " Set the color of the Rows in Message Excel
+        IF ls_column_description-name = 'Message Type'.     "#EC NOTEXT
+          ASSIGN COMPONENT 1 OF STRUCTURE is_row TO <la_msg_type>. "#EC CI_BOX_OK
+          IF <la_msg_type> EQ 'Error'.
+            lo_cell_element->set_attribute_ns( name = 's' value = '11'  ).  " Red                                  "#EC NOTEXT
+          ELSEIF <la_msg_type> EQ 'Success'.                "#EC NOTEXT
+            lo_cell_element->set_attribute_ns( name = 's' value = '12'  ).  " Red                                  "#EC NOTEXT
+          ELSEIF <la_msg_type> EQ 'Warning' OR              "#EC NOTEXT
+                 <la_msg_type> EQ 'Information'.            "#EC NOTEXT
+            lo_cell_element->set_attribute_ns( name = 's' value = '10'  ).  " Red                                  "#EC NOTEXT
+          ENDIF.
+        ENDIF.
+      ENDIF.
+
+      IF iv_is_alv_document = abap_true AND ( iv_call_type NE if_fdt_doc_spreadsheet=>gc_call_dec_table AND
+                                              iv_call_type NE if_fdt_doc_spreadsheet=>gc_call_trace AND
+                                              iv_call_type NE if_fdt_doc_spreadsheet=>gc_call_new_lean_trace AND
+                                              iv_call_type NE if_fdt_doc_spreadsheet=>gc_call_message_area ).
+        lo_cell_element->set_attribute_ns( name = 's' value = '2'  ).
+      ENDIF.
+      IF it_column IS NOT INITIAL.
+        READ TABLE it_column INTO ls_column INDEX lv_index.
+        IF ls_column IS NOT INITIAL .
+          IF iv_call_type NE if_fdt_doc_spreadsheet=>gc_call_trace AND
+             iv_call_type NE if_fdt_doc_spreadsheet=>gc_call_new_lean_trace AND
+             iv_call_type NE if_fdt_doc_spreadsheet=>gc_call_message_area.
+            IF ls_column-is_result EQ abap_true .
+              lo_cell_element->set_attribute_ns( name = 's' value = '5'  ).
+            ELSE.
+              lo_cell_element->set_attribute_ns( name = 's' value = '3'  ).
+            ENDIF.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+      lo_cell_value_element = io_sheet_xml_document->create_element_ns( 'v' ).
+
+      lv_column_type ?= ls_column_description-type.
+      IF lv_column_type->type_kind EQ 'I' OR lv_column_type->type_kind EQ 'N' . "#EC CI_INT8_OK
+        " Integer value
+        lv_cell_content_int = <la_cell>.
+      ELSE.
+        " String value
+        lv_cell_content_string = <la_cell>.
+        lo_cell_element->set_attribute_ns( name = 't' value = 's' ).
+        lv_cell_content_int = set_shared_string_buffer( lv_cell_content_string ).
+      ENDIF.
+
+      cl_abap_string_utilities=>del_trailing_blanks( CHANGING str = lv_cell_content_int ).
+      lv_text = io_sheet_xml_document->create_text( lv_cell_content_int ).
+
+      lo_cell_value_element->append_child( lv_text ).
+      lo_cell_element->append_child( lo_cell_value_element ).
+      io_row_element->append_child( lo_cell_element ).
+    ENDLOOP.
+
+
+  ENDMETHOD.
+
+
+  METHOD create_cell_elements_header.
+
+    DATA: lv_index TYPE i,
+          ls_column_description LIKE LINE OF it_column_description,
+          ls_column TYPE if_fdt_doc_spreadsheet=>s_column,
+          lo_cell_element TYPE REF TO if_ixml_element,    " <c> = cell
+          lo_cell_value_element TYPE REF TO if_ixml_element,
+          lv_ls_column_type  TYPE REF TO cl_abap_typedescr,
+          lv_cell_content_int        TYPE string,
+          lv_cell_content_string  TYPE string,
+          lv_text TYPE REF TO if_ixml_text.
+
+    FIELD-SYMBOLS: <itab_status> TYPE any,
+                   <itab_type>   TYPE any,
+                   <itab_color>   TYPE string,
+                   <itab_msg_type> TYPE any,
+                   <itab_cell> TYPE any.
+
+
+    LOOP AT it_column_description INTO ls_column_description.
+      lv_index = sy-tabix.
+      lo_cell_element = io_sheet_xml_document->create_element_ns( 'c' ).
+      lo_cell_element->set_attribute_ns( name = 'r' value = convert_i_to_column( sy-tabix ) && '1' ).
+      IF iv_is_alv_document = abap_false.
+        lo_cell_element->set_attribute_ns( name = 's' value = '1' ). " Bold
+      ELSE.
+        IF it_column IS NOT INITIAL.
+          READ TABLE it_column INTO ls_column INDEX lv_index.
+          IF ls_column IS NOT INITIAL .
+            IF ls_column-is_result EQ abap_true .
+              lo_cell_element->set_attribute_ns( name = 's' value = '4'  ).
+            ELSE.
+              lo_cell_element->set_attribute_ns( name = 's' value = '2'  ).
+            ENDIF.
+          ENDIF.
+        ELSE.
+          lo_cell_element->set_attribute_ns( name = 's' value = '3' ). " Bold & protected
+        ENDIF.
+      ENDIF.
+      lo_cell_element->set_attribute_ns( name = 't' value = 's' ). " String value
+      lo_cell_value_element = io_sheet_xml_document->create_element_ns( 'v' ).
+      lv_cell_content_int = set_shared_string_buffer( ls_column_description-name ).
+      lv_text = io_sheet_xml_document->create_text( lv_cell_content_int ).
+      lo_cell_value_element->append_child( lv_text ).
+      lo_cell_element->append_child( lo_cell_value_element ).
+      io_row_element->append_child( lo_cell_element ).
+    ENDLOOP.
+
+
+  ENDMETHOD.
+
+
+METHOD create_document.
+  DATA:
+        xblank_document   TYPE xstring,
+        xsheet            TYPE xstring,
+        obj_ssheet_ooxml  TYPE REF TO cl_fdt_xl_spreadsheet,
+        ws_tab            TYPE STANDARD TABLE OF string,
+        ws                TYPE string,
+        xml_doc           TYPE REF TO if_ixml_document.
+
+* Enabling iXML support
+  TYPE-POOLS: ixml.
+  CLASS cl_ixml DEFINITION LOAD.
+  xblank_document = cl_fdt_xl_spreadsheet=>create_blank_document_struct( is_alv_document = is_alv_document
+                                                                         iv_call_type    = iv_call_type
+                                                                         iv_sheet_name   = iv_sheet_name ).
+
+  CREATE OBJECT obj_ssheet_ooxml
+    EXPORTING
+      document_name = name
+      xdocument     = xblank_document.
+  obj_ssheet_ooxml->if_fdt_doc_spreadsheet~get_worksheet_names( IMPORTING worksheet_names = ws_tab  ).
+
+* Get first sheet
+  READ TABLE ws_tab INDEX 1 INTO ws.
+  IF ws IS INITIAL.
+    " No worksheets
+    EXIT.
+  ENDIF.
+  xsheet = obj_ssheet_ooxml->get_worksheet_by_name( ws ).
+
+* Parse XML sheet
+  xml_doc = obj_ssheet_ooxml->parse_xml( xsheet ).
+  IF xml_doc IS INITIAL.
+    EXIT.
+  ENDIF.
+
+* Set the actual worksheet
+  obj_ssheet_ooxml->set_worksheet_sheetdata(
+                                      sheet_xml_document = xml_doc
+                                      columns            = columns
+                                      itab               = itab
+                                      iv_call_type       = iv_call_type
+                                      is_alv_document    = is_alv_document ).
+
+* Render worksheet XML to xstring and add it to document
+  obj_ssheet_ooxml->overwrite_worksheet_by_name( worksheet_name = ws xsheet = obj_ssheet_ooxml->render_xml( xml_doc ) ).
+
+  "TODO Generate a help for simulation excel
+
+* Get Second sheet " help
+  CLEAR xml_doc .
+  READ TABLE ws_tab INDEX 2 INTO ws.
+  IF ws IS NOT INITIAL.
+    xsheet = obj_ssheet_ooxml->get_worksheet_by_name( ws ).
+*   Parse XML sheet
+    xml_doc = obj_ssheet_ooxml->parse_xml( xsheet ).
+    CHECK xml_doc IS NOT INITIAL.
+*   Set the HELP worksheet
+
+    IF iv_call_type EQ if_fdt_doc_spreadsheet=>gc_call_dec_table.
+      obj_ssheet_ooxml->set_help_dt_sheetdata( xml_doc ).
+    ELSEIF iv_call_type EQ if_fdt_doc_spreadsheet=>gc_call_simulation.
+      obj_ssheet_ooxml->set_help_sim_sheetdata( xml_doc ).
+    ENDIF.
+
+*   Render worksheet XML to xstring and add it to document
+    obj_ssheet_ooxml->overwrite_worksheet_by_name( worksheet_name = ws xsheet = obj_ssheet_ooxml->render_xml( xml_doc ) ).
+  ENDIF.
+
+* Get Third Sheet "col description
+  CLEAR xml_doc.
+  READ TABLE ws_tab INDEX 3 INTO ws.
+  IF ws IS NOT INITIAL. "AND iv_call_type EQ if_fdt_doc_spreadsheet=>gc_call_dec_table.
+    xsheet = obj_ssheet_ooxml->get_worksheet_by_name( ws ).
+*   Parse XML sheet
+    xml_doc = obj_ssheet_ooxml->parse_xml( xsheet ).
+    CHECK xml_doc IS NOT INITIAL.
+*   Set the actual worksheet
+    obj_ssheet_ooxml->set_worksheet_sheetdata(
+                                        sheet_xml_document = xml_doc
+                                        columns            = columns_aux
+                                        itab               = itab_aux_col_desc
+                                        iv_call_type       = iv_call_type
+                                        iv_column_dectab   = abap_true
+                                        is_alv_document    = is_alv_document ).
+
+*   Render worksheet XML to xstring and add it to document
+    obj_ssheet_ooxml->overwrite_worksheet_by_name( worksheet_name = ws xsheet = obj_ssheet_ooxml->render_xml( xml_doc ) ).
+  ENDIF.
+
+* Get the mapping sheet in case of decision table
+* Get Third Sheet "col description
+  IF  iv_call_type EQ if_fdt_doc_spreadsheet=>gc_call_dec_table.
+    CLEAR xml_doc.
+    READ TABLE ws_tab INDEX 4 INTO ws.
+    IF ws IS NOT INITIAL. "AND iv_call_type EQ if_fdt_doc_spreadsheet=>gc_call_dec_table.
+      xsheet = obj_ssheet_ooxml->get_worksheet_by_name( ws ).
+*   Parse XML sheet
+      xml_doc = obj_ssheet_ooxml->parse_xml( xsheet ).
+      CHECK xml_doc IS NOT INITIAL.
+*   Set the actual worksheet
+      obj_ssheet_ooxml->set_worksheet_sheetdata(
+                                          sheet_xml_document = xml_doc
+                                          columns            = it_dt_map_col
+                                          itab               = it_dt_map_col_desc
+                                          iv_call_type       = iv_call_type
+                                          iv_column_dectab   = abap_true
+                                          is_alv_document    = is_alv_document ).
+
+*   Render worksheet XML to xstring and add it to document
+      obj_ssheet_ooxml->overwrite_worksheet_by_name( worksheet_name = ws xsheet = obj_ssheet_ooxml->render_xml( xml_doc ) ).
+    ENDIF.
+  ENDIF.
+* Set the shared strings finally
+  obj_ssheet_ooxml->set_shared_strings( ).
+* returning the document as XSTRING
+  xdocument = obj_ssheet_ooxml->if_fdt_document~get_document( ).
+ENDMETHOD.
+
+
+  METHOD create_worksheet_row.
+
+    DATA: lo_row_element TYPE REF TO if_ixml_element,
+          lv_row_number_string TYPE string,
+          lv_group_number_string TYPE string.
+    FIELD-SYMBOLS: <la_status> TYPE any.
+
+* Use method CREATE_WORKSHEET_ROW_NLT instead
+    ASSERT iv_call_type NE if_fdt_doc_spreadsheet=>gc_call_new_lean_trace.
+
+* Create new row
+    lo_row_element = create_worksheet_row_base( io_sheet_xml_document = io_sheet_xml_document
+                                                iv_row = iv_row_number ).
+    lv_row_number_string = iv_row_number.
+    cl_abap_string_utilities=>del_trailing_blanks( CHANGING str = lv_row_number_string ). "remove blanks
+    create_cell_elements( is_row                = is_row
+                          io_row_element        = lo_row_element
+                          iv_row_number         = lv_row_number_string
+                          it_column             = it_column
+                          it_column_description = it_column_description
+                          io_sheet_xml_document = io_sheet_xml_document
+                          iv_call_type          = iv_call_type
+                          iv_is_alv_document    = iv_is_alv_document ).
+
+* Set group
+    IF iv_call_type EQ if_fdt_doc_spreadsheet=>gc_call_trace.
+      ASSIGN COMPONENT 3 OF STRUCTURE is_row TO <la_status>. "#EC CI_BOX_OK
+      IF <la_status> EQ 'STARTED'(002) OR <la_status> EQ 'Started'(083).
+        cv_group_number = cv_group_number + 1.
+        cv_group_number_max = cv_group_number_max + 1.
+      ELSEIF <la_status> EQ 'FINISHED'(003) OR <la_status> EQ 'Finished'(084).
+        cv_group_number = cv_group_number - 1.
+      ENDIF.
+      IF cv_group_number > 0.
+        lv_group_number_string = cv_group_number.
+        cl_abap_string_utilities=>del_trailing_blanks( CHANGING str = lv_group_number_string ).
+        lo_row_element->set_attribute_ns( name = 'outlineLevel' value = lv_group_number_string ).
+      ENDIF.
+    ENDIF.
+
+* Append row
+    io_sheet_data_node->append_child( lo_row_element ).
+
+  ENDMETHOD.
+
+
+  METHOD CREATE_WORKSHEET_ROW_BASE.
+
+    DATA: lv_row TYPE string.
+
+    lv_row = iv_row.
+    cl_abap_string_utilities=>del_trailing_blanks( CHANGING str = lv_row ).
+    ro_row_element = io_sheet_xml_document->create_element_ns( 'row' ).
+    ro_row_element->set_attribute_ns( name = 'r' value = lv_row ).
+
+  ENDMETHOD.
+
+
+  METHOD create_worksheet_row_ntl.
+
+    DATA: lo_row_element TYPE REF TO if_ixml_element,
+          lr_row TYPE REF TO data,
+          lv_row_number_string TYPE string,
+          lv_group_number TYPE int4,
+          lv_group_number_string TYPE string,
+          lr_int4 TYPE REF TO int4.
+    FIELD-SYMBOLS: <la_status> TYPE any,
+                   <la_row> TYPE any,
+                   <la_level> TYPE int4,
+                   <la_level1> TYPE int4.
+    CONSTANTS: lc_group_number_max TYPE int4 VALUE '7'.
+
+
+    CREATE DATA lr_row LIKE LINE OF it_data.
+    ASSIGN lr_row->* TO <la_row>.
+
+    ASSIGN COMPONENT 5 OF STRUCTURE is_row TO <la_level>.   " Get level
+
+* First line in itab = First root row: Just create a regular row without grouping
+    IF iv_row_index = 1.
+      lo_row_element = create_worksheet_row_base( io_sheet_xml_document = io_sheet_xml_document
+                                                  iv_row = cv_row_number ).
+      lv_row_number_string = cv_row_number.
+      create_cell_elements( is_row                = is_row
+                            io_row_element        = lo_row_element
+                            iv_row_number         = lv_row_number_string
+                            it_column             = it_column
+                            it_column_description = it_column_description
+                            io_sheet_xml_document = io_sheet_xml_document
+                            iv_call_type          = if_fdt_doc_spreadsheet=>gc_call_new_lean_trace
+                            iv_is_alv_document    = iv_is_alv_document ).
+      io_sheet_data_node->append_child( lo_row_element ).
+      cv_row_number = cv_row_number + 1.
+      RETURN. " <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< RETURN
+    ENDIF.
+
+* Row is a root row (but not the first one): Insert an empty line beforehand to
+* close the group of the previous root row. Root row itself gets no group.
+    IF <la_level> = cl_fdt_wd_lean_trace_helper=>gc_level_root.
+      insert_empty_worksheet_row( EXPORTING io_sheet_xml_document = io_sheet_xml_document
+                                            io_sheet_data_node = io_sheet_data_node
+                                   CHANGING
+                                            cv_row = cv_row_number ).
+
+      lo_row_element = create_worksheet_row_base( io_sheet_xml_document = io_sheet_xml_document
+                                                  iv_row = cv_row_number ).
+      lv_row_number_string = cv_row_number.
+      create_cell_elements( is_row                = is_row
+                            io_row_element        = lo_row_element
+                            iv_row_number         = lv_row_number_string
+                            it_column             = it_column
+                            it_column_description = it_column_description
+                            io_sheet_xml_document = io_sheet_xml_document
+                            iv_call_type          = if_fdt_doc_spreadsheet=>gc_call_new_lean_trace
+                            iv_is_alv_document    = iv_is_alv_document ).
+      io_sheet_data_node->append_child( lo_row_element ).
+      cv_row_number = cv_row_number + 1.
+      RETURN.  " <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< RETURN
+    ENDIF.
+
+* Handling of all non-root rows:
+* Read previous line of itab (should not be a problem, since the first line
+* was already handled above). Get the previous level
+    READ TABLE it_data INTO <la_row> INDEX ( iv_row_index - 1 ).
+    ASSERT sy-subrc = 0.
+    ASSIGN COMPONENT 5 OF STRUCTURE <la_row> TO <la_level1>.
+
+    " Create row
+    lo_row_element = create_worksheet_row_base( io_sheet_xml_document = io_sheet_xml_document
+                                                iv_row = cv_row_number ).
+    lv_row_number_string = cv_row_number.
+    create_cell_elements( is_row                = is_row
+                          io_row_element        = lo_row_element
+                          iv_row_number         = lv_row_number_string
+                          it_column             = it_column
+                          it_column_description = it_column_description
+                          io_sheet_xml_document = io_sheet_xml_document
+                          iv_call_type          = if_fdt_doc_spreadsheet=>gc_call_new_lean_trace
+                          iv_is_alv_document    = iv_is_alv_document ).
+
+    " Set group: Default: Overtake level as group.
+    " However, since Excel can deal only with eight group levels, we have to apply a limit here
+    " Group levels 0, 1-7
+    lv_group_number = <la_level>.
+    IF lv_group_number > lc_group_number_max.
+      lv_group_number = lc_group_number_max.
+    ENDIF.
+    IF lv_group_number > cv_group_number_max.
+      cv_group_number_max = lv_group_number.
+    ENDIF.
+    lv_group_number_string = lv_group_number.
+    cl_abap_string_utilities=>del_trailing_blanks( CHANGING str = lv_group_number_string ).
+    lo_row_element->set_attribute_ns( name = 'outlineLevel' value = lv_group_number_string ).
+
+    " Append element
+    io_sheet_data_node->append_child( lo_row_element ).
+    cv_row_number = cv_row_number + 1.
+
+* Last line in IT_DATA: Append an empty row to close the open group
+    IF iv_row_index = lines( it_data ).
+      insert_empty_worksheet_row( EXPORTING io_sheet_xml_document = io_sheet_xml_document
+                                            io_sheet_data_node = io_sheet_data_node
+                                   CHANGING
+                                            cv_row = cv_row_number ).
+    ENDIF.
+
+  ENDMETHOD.
+
+
+method EXTRACT_COL_FROM_A1_STYLE.
+
+  data:
+        coord_str   type string,
+        cc          type c,
+        pos         type i,
+        strl        type i.
+
+  coord_str = input.
+  translate coord_str to upper case.
+  strl = strlen( coord_str ).
+
+  DO strl TIMES.
+    pos = sy-index - 1.
+    cc = coord_str+pos(1).
+    if cc >= 'A' and cc <= 'Z'.
+      column = column && cc.
+    else.
+      exit.
+    endif.
+  ENDDO.
+
+endmethod.
+
+
+method GET_CELLXFS.
+
+  " Get number format of defined cells
+  data:
+        x_styles        type xstring,
+        style_relation  type t_pod_relation.
+
+  read table me->workbook_relations with key type = if_fdt_xl_types=>OOXML_RELATIONSHIP_STYLES into style_relation.
+
+  try.
+      x_styles = me->if_fdt_doc_pkg~get_file_as_xstring( workbook_folder && style_relation-target ).
+      call transformation fdt_xl_get_cellxfs
+        source xml x_styles
+        result numfmids = cellxfs.
+    catch cx_fdt_excel_core.
+      "Style XML file not found.
+      exit.
+  endtry.
+endmethod.
+
+
+method GET_CELL_STYLE_ID.
+  data:
+         cell              type ref to if_ixml_node,
+         cell_iterator     type ref to if_ixml_node_iterator.
+  type-pools ixml.
+
+  style_id = 0.
+
+* Process XML
+  try.
+      cell_iterator = xml_doc->get_elements_by_tag_name_ns( name = 'c'  uri = if_fdt_xl_types=>ns_ooxml_ssheet_main )->create_iterator( ).
+      cell = cell_iterator->get_next( ).
+    catch cx_root.
+      " No <c> elements thus no value for the cell
+      exit.
+  endtry.
+
+
+* Searching cell TODO: dynamic XSLT?
+  while cell is not initial.
+    if get_attr_from_node( iv_name = 'r' io_node = cell ) = cell_coordinate.
+      " Get the value
+      try.
+        style_id = get_attr_from_node( iv_name = 's' io_node  = cell  ).
+      catch cx_root.
+        " No s attribute, setting general format
+        style_id = 0.
+      endtry.
+      exit.
+    endif.
+    cell = cell_iterator->get_next( ).
+  endwhile.
+endmethod.
+
+
+method GET_CELL_VALUE.
+* max tab size: XFD1048576
+  data:
+        x_sheet   type xstring,
+        xml_doc   type ref to if_ixml_document,
+        s_strings type standard table of string.
+
+  type-pools ixml.
+
+  x_sheet = me->get_worksheet_by_name( sheet_name ).
+  if x_sheet is initial.
+    " No sheet with this name
+    exit.
+  endif.
+
+* Get shared strings
+  get_shared_strings( importing strings = s_strings ).
+
+* Process XML
+  xml_doc = parse_xml( x_sheet ).
+
+  cell_value = get_cell_value_by_xmldoc_shrds(
+      cell_coordinate = cell_coordinate
+      shared_strings  = s_strings
+      xml_doc         = xml_doc ).
+endmethod.
+
+
+method GET_CELL_VALUE_BY_XMLDOC_SHRDS.
+
+ data:
+        cell              type ref to if_ixml_node,
+        cell_iterator     type ref to if_ixml_node_iterator,
+        value_element     type ref to if_ixml_element,
+        value             type string,
+        cell_string_id    type string.
+  type-pools ixml.
+
+* Process XML
+  try.
+    cell_iterator = xml_doc->get_elements_by_tag_name_ns( name = 'c'  uri = if_fdt_xl_types=>ns_ooxml_ssheet_main )->create_iterator( ).
+    cell = cell_iterator->get_next( ).
+  catch cx_root.
+    " Either no <c> elements so no value for the cell
+    cell_value = ''.
+    exit.
+  endtry.
+
+* Searching cell TODO: dynamic XSLT?
+  while cell is not initial.
+    if get_attr_from_node( iv_name = 'r' io_node = cell ) = cell_coordinate.
+      " Get the value
+        try.
+* First child returns <f> formula if present, otherwise <v>
+*          value_element ?= cell->get_first_child( )->query_interface( ixml_iid_element ).
+          value_element ?= cell->query_interface( ixml_iid_element  ).
+          value_element = value_element->find_from_name_ns( name = 'v'  uri = if_fdt_xl_types=>ns_ooxml_ssheet_main ).
+          value = value_element->get_value( ).
+        catch cx_root.
+          " No <v> element present so no value for this cell
+          value = ''.
+        endtry.
+      " Check type
+      if get_attr_from_node( iv_name = 't' io_node = cell ) = 's'.
+          " String value... get respective sharedString
+          cell_string_id = value + 1.
+          read table shared_strings index cell_string_id into cell_value.
+      else.
+        cell_value = value.
+      endif.
+    exit.
+    endif.
+    cell = cell_iterator->get_next( ).
+  endwhile.
+
+endmethod.
+
+
+  method GET_CELL_VALUE_FROM_WORKSHEET.
+    cell_value = get_cell_value( sheet_name = sheet_name cell_coordinate = cell_coordinate ).  "nt_2998534
+  endmethod.
+
+
+method GET_COL_AND_ROW_FROM_A1_STYLE.
+
+  data:
+        coord_str   type string,
+        cc          type c,
+        pos         type i,
+        strl        type i,
+        column_str  type string value ''.
+
+  coord_str = coordinate.
+  clear column_number.
+  clear row_number.
+
+  translate coord_str to upper case.
+  strl = strlen( coord_str ).
+
+  DO strl TIMES.
+    pos = sy-index - 1.
+    cc = coord_str+pos(1).
+    if cc >= 'A' and cc <= 'Z'.
+      column_str = column_str && cc.
+    else.
+      row_number = row_number && cc.
+    endif.
+  ENDDO.
+
+  column_number = convert_column_to_i( column_str ).
+
+endmethod.
+
+
+method GET_COL_FROM_A1_STYLE.
+
+  data:
+        coord_str   type string,
+        cc          type c,
+        pos         type i,
+        strl        type i,
+        column_str  type string value ''.
+
+  coord_str = coordinate.
+  translate coord_str to upper case.
+  strl = strlen( coord_str ).
+
+  DO strl TIMES.
+    pos = sy-index - 1.
+    cc = coord_str+pos(1).
+    if cc >= 'A' and cc <= 'Z'.
+      column_str = column_str && cc.
+    else.
+      exit.
+    endif.
+  ENDDO.
+
+  column_number = convert_column_to_i( column_str ).
+
+endmethod.
+
+
+method GET_ITAB_FOR_ALV_BY_XMLDOC.
+  data:
+        shared_strings  type standard table of string,
+        cellxfs         type standard table of string,
+        numfmtid        like line of me->numfmtids.
+
+* Process XML
+  data:
+        row             type ref to if_ixml_node,
+        rows            type ref to if_ixml_node_collection,
+        row_iterator    type ref to if_ixml_node_iterator,
+        row_element     type ref to if_ixml_element,
+        col             type ref to if_ixml_node,
+        cols            type ref to if_ixml_node_collection,
+        col_element     type ref to if_ixml_element,
+        col_iterator    type ref to if_ixml_node_iterator,
+        current_column  type string,
+        current_col_num type i,
+        style_id        type string,
+        cell_value      type string,
+        cell_string_id  type string,
+        cell_element    type ref to if_ixml_element,
+        loopcount       type i.
+
+  field-symbols: <dyn_table>  type standard table,
+                 <dyn_wa>     type any.
+  data:
+        dy_table  type ref to data,
+        dy_line   type ref to data,
+        xfc       type lvc_s_fcat,
+        ifc       type lvc_t_fcat.
+
+
+  type-pools:
+              ixml,
+              abap.
+
+  if xml_doc is initial.
+    exit.
+  endif.
+
+* Get shared strings
+  get_shared_strings( importing strings = shared_strings ).
+
+* Get styles table for number formats
+  get_cellxfs( importing cellxfs = cellxfs ).
+
+  field-symbols:
+                 <dyn_row_count> type any,
+                 <dyn_column>    type any.
+
+
+* Get collection of rows
+  rows = xml_doc->get_elements_by_tag_name_ns( name  = 'row'  uri = if_fdt_xl_types=>ns_ooxml_ssheet_main ).
+  if rows->get_length( ) = 0.
+    " No columns to process, leaving
+    exit.
+  endif.
+  row_iterator = rows->create_iterator( ).
+
+* Create linetype for interal table
+* First row contains column heads
+  row = row_iterator->get_next( ).
+  row_element ?= row->query_interface( ixml_iid_element ).
+
+  cols = row_element->get_elements_by_tag_name_ns( name = 'c'  uri = if_fdt_xl_types=>ns_ooxml_ssheet_main ).
+  col_iterator = cols->create_iterator( ).
+  col = col_iterator->get_next( ).
+  while col is not initial.
+      col_element ?= col->query_interface( ixml_iid_element ).
+      cell_element = col_element->find_from_name_ns( name = 'v'  uri = if_fdt_xl_types=>ns_ooxml_ssheet_main ).
+      if cell_element is not initial.
+        cell_value = cell_element->get_value( ).
+        " Check cell type
+        if get_attr_from_node( iv_name = 't' io_node = col ) = 's'.
+          cell_string_id = cell_value + 1.
+          read table shared_strings index cell_string_id into cell_value.
+        else.
+          " not a string value
+        endif.
+        " Check format of cell value because of date/time representation
+*        read table cellxfs into style_id index ( get_attr_from_node( name = 's' node = col ) + 1 ).
+*        read table me->numfmtids into numfmtid with key id = style_id.
+        xfc-fieldname = cell_value.
+        xfc-datatype =  'g'. " TODO depending on number format?
+        xfc-inttype = 'g'.
+        xfc-intlen =  0.
+        append xfc to ifc.
+        clear xfc.
+      endif." Cell element is not initial
+      col = col_iterator->get_next( ).
+    endwhile." Cols
+
+* Create internal table
+  call method cl_alv_table_create=>create_dynamic_table
+    exporting
+      it_fieldcatalog           = ifc " Field Catalog
+    importing
+      ep_table                  = dy_table " Pointer to Dynamic Data Table
+    exceptions
+      generate_subpool_dir_full = 1
+      others                    = 2.
+  if sy-subrc <> 0.
+    message id sy-msgid type sy-msgty number sy-msgno
+               with sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  endif.
+
+  assign dy_table->* to <dyn_table>.
+  create data dy_line like line of <dyn_table>.
+  assign dy_line->* to <dyn_wa>.
+
+
+* Fill content
+  row = row_iterator->get_next( ).
+  while row is not initial .
+    clear dy_line.
+    unassign <dyn_wa>.
+    create data dy_line like line of <dyn_table>.
+    assign dy_line->* to <dyn_wa>.
+
+    row_element ?= row->query_interface( ixml_iid_element ).
+
+    cols = row_element->get_elements_by_tag_name_ns( name = 'c'  uri = if_fdt_xl_types=>ns_ooxml_ssheet_main ).
+    if cols->get_length( ) = 0.
+      " This row contains no column/values, continue
+      row = row_iterator->get_next( ).
+      continue.
+    else.
+      col_iterator = cols->create_iterator( ).
+      col = col_iterator->get_next( ).
+    endif.
+
+    while col is not initial.
+      col_element ?= col->query_interface( ixml_iid_element ).
+      current_col_num = convert_column_to_i( extract_col_from_a1_style( get_attr_from_node( iv_name = 'r' io_node = col ) ) ).
+      read table ifc index current_col_num into xfc.
+      current_column = xfc-fieldname.
+
+      cell_element = col_element->find_from_name_ns( name = 'v'  uri = if_fdt_xl_types=>ns_ooxml_ssheet_main ).
+      if cell_element is not initial.
+        cell_value = cell_element->get_value( ).
+        " Check cell type
+        if get_attr_from_node( iv_name = 't' io_node = col ) = 's'.
+          cell_string_id = cell_value + 1.
+          read table shared_strings index cell_string_id into cell_value.
+        else.
+          " not a string value
+        endif.
+        " Check format of cell value because of date/time representation
+        read table cellxfs into style_id index ( get_attr_from_node( iv_name = 's' io_node = col ) + 1 ).
+        read table me->numfmtids into numfmtid with key id = style_id.
+        " Hook method for implementing other format representations:
+        cell_value = convert_cell_value_by_numfmt( cell_value = cell_value number_format = numfmtid-formatcode ).
+        assign component current_column of structure <dyn_wa> to <dyn_column>.
+        " write cell_value.
+        <dyn_column> = cell_value.
+      endif." Cell element is not initial
+
+      col = col_iterator->get_next( ).
+    endwhile." Cols
+     insert <dyn_wa> into <dyn_table> index sy-index.
+    row = row_iterator->get_next( ).
+  endwhile.
+
+  itab = dy_table.
+
+endmethod.
+
+
+method GET_ITAB_FOR_ALV_UPDATE.
+* max tab size: XFD1048576
+  data:
+        x_sheet     type xstring,
+        worksheet   like line of cl_fdt_xl_spreadsheet=>worksheets,
+        dim         type string,
+        dim_start   type string,
+        dim_end     type string,
+        xml_doc     type ref to if_ixml_document.
+
+  type-pools ixml.
+
+* Get sheet
+  read table me->worksheets index 1 into worksheet.
+  if worksheet is initial.
+    " No sheet, no itab
+    exit.
+  endif.
+
+* Get dimensions of the sheet
+  x_sheet = me->get_worksheet_by_name( worksheet-name ).
+  call transformation fdt_xl_get_sheet_dimension
+        source xml x_sheet
+        result dimension = dim.
+  if dim is initial.
+    exit.
+  endif.
+  split dim at ':' into dim_start dim_end.
+
+  if dim_end is initial.
+    " Only one cell is populated
+    dim_end = dim_start.
+  endif.
+
+* Parse document
+  xml_doc = parse_xml( x_sheet ).
+  if xml_doc is initial.
+    exit.
+  endif.
+
+  itab = get_itab_for_alv_by_xmldoc(
+      range_start = dim_start
+      range_end   = dim_end
+      xml_doc     = xml_doc
+  ).
+
+endmethod.
+
+
+METHOD get_itab_from_sheet.
+* max tab size: XFD1048576
+  DATA:
+        x_sheet   TYPE xstring,
+        w_sheet   TYPE ooxml_worksheet,
+        dim       TYPE string,
+        dim_start TYPE string,
+        dim_end   TYPE string,
+        xml_doc   TYPE REF TO if_ixml_document.
+
+  TYPE-POOLS ixml.
+
+* Get dimensions of the sheet
+  x_sheet = me->get_worksheet_by_name( worksheet_name ).
+  CALL TRANSFORMATION fdt_xl_get_sheet_dimension
+        SOURCE XML x_sheet
+        RESULT dimension = dim.
+  IF dim IS INITIAL.
+    EXIT.
+  ENDIF.
+  SPLIT dim AT ':' INTO dim_start dim_end.
+  IF dim_end IS INITIAL.
+    " Only one cell is populated
+    dim_end = dim_start.
+  ENDIF.
+
+  "language retrieve
+  IF iv_get_language EQ abap_true.
+    IF iv_caller EQ if_fdt_doc_spreadsheet=>gc_call_dec_table.
+      dim_start = 'A48'.      "#EC NOTEXT
+      dim_end   = 'B48'.      "#EC NOTEXT
+    ELSEIF iv_caller EQ if_fdt_doc_spreadsheet=>gc_call_simulation.
+      dim_start = 'A17'.      "#EC NOTEXT
+      dim_end   = 'B17'.      "#EC NOTEXT
+    ENDIF.
+  ENDIF.
+* Parse document
+  xml_doc = parse_xml( x_sheet ).
+  IF xml_doc IS INITIAL.
+    EXIT.
+  ENDIF.
+
+  itab = get_range_itab_from_xmldoc(
+      range_start = dim_start
+      range_end   = dim_end
+      xml_doc     = xml_doc
+  ).
+
+ENDMETHOD.
+
+
+  METHOD get_langu_text.
+
+    DATA: lv_text TYPE sptxt.
+
+    SELECT SINGLE sptxt FROM t002t INTO lv_text WHERE spras = sy-langu AND sprsl = iv_langu.
+
+    IF lv_text IS NOT INITIAL.
+      rv_text = lv_text.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+method GET_MAPPING.
+  data mapping_rel type t_pod_relation.
+
+  if me->obj_doc_zip is initial.
+    " No document loaded... no chance to set mapping
+    exit.
+  endif.
+
+  " Check whether mapping is defined
+  read table me->package_relations into mapping_rel with key type = if_fdt_xl_types=>mapping_namespace.
+
+  if mapping_rel is initial.
+    " No mapping defined... leaving
+    exit.
+  endif.
+
+  " Load mapping (overwrite if existing)
+  create object mapping.
+  try.
+    mapping->from_xml_xstring( me->if_fdt_doc_pkg~get_file_as_xstring( mapping_rel-target ) ).
+  catch cx_fdt_excel_core.
+    " Mapping file does not exist
+    clear mapping.
+  endtry.
+endmethod.
+
+
+method GET_NAMED_CELL.
+  if me->named_cells is initial.
+    " No named cells... leaving
+    exit.
+  endif.
+
+  data named_cell type struc_named_cell.
+
+  read table me->named_cells into named_cell with key name =  cell_name.
+  if named_cell is initial.
+    " No named cell called cell_name... leaving
+    exit.
+  endif.
+
+  if named_cell-sheet_name is initial or named_cell-sheet_name = ''.
+    " Must be a hidden definedName
+    cell_value = named_cell-cell.
+  else.
+    cell_value = get_cell_value( sheet_name = named_cell-sheet_name cell_coordinate = named_cell-cell ).
+    cell_value = convert_cell_value_by_numfmt(
+        cell_value      = cell_value
+        number_format   = named_cell-format ).
+  endif.
+endmethod.
+
+
+method GET_NAMED_CELLS.
+  named_cells = me->named_cells.
+endmethod.
+
+
+method GET_NAMED_RANGES.
+  named_ranges = me->named_ranges.
+endmethod.
+
+
+method GET_NAMED_RANGE_ITAB.
+  data:
+        named_range     type struc_named_range,
+        x_sheet         type xstring,
+        xml_doc         type ref to if_ixml_document,
+        shared_strings  type standard table of string.
+
+  type-pools ixml.
+
+  if me->named_ranges is initial.
+    " no named ranges or not loaded
+    exit.
+  endif.
+* Search the range entry
+  read table me->named_ranges into named_range with key name = range.
+
+  if named_range is initial.
+    " Range does not exist... leaving
+    exit.
+  endif.
+
+* Get shared strings
+  get_shared_strings( importing strings = shared_strings ).
+
+* Get appropriate sheet
+  x_sheet = get_worksheet_by_name( named_range-sheet_name ).
+  if x_sheet is initial.
+    " Sheet does not exist, leaving
+    exit.
+  endif.
+
+* Parse XML document
+  xml_doc = parse_xml( x_sheet ).
+  if xml_doc is initial.
+    " Error parsing XML document
+    exit.
+  endif.
+
+* Create itab from given range coordinates, shared string table and XML doc
+  itab = GET_RANGE_ITAB_FROM_XMLDOC(
+            range_start    = named_range-start_cell    " A1 style start coordinate
+            range_end      = named_range-end_cell      " A1 style end coordinate
+            xml_doc        = xml_doc                   " IF_IXML_DOCUMENT
+            ).
+endmethod.                    "GET_NAMED_RANGE_ITAB
+
+
+method GET_OR_CREATE_INDEX_SHARED_STR.
+  data:
+        rel_s_str       type t_pod_relation,
+        x_file          type xstring,
+        comp_string     type string,
+        shared_strings  type standard table of string.
+
+* Enabling iXML support
+  type-pools: ixml.
+  class cl_ixml definition load.
+
+  index = -1.
+
+  if workbook_relations is initial.
+    exit.
+  endif.
+
+  read table me->workbook_relations with key type = if_fdt_xl_types=>ooxml_relationship_shrdstr into rel_s_str.
+  if rel_s_str is initial.
+    " Shared Strings not present! Try to create sharedStrings.xml file
+    me->init_shared_strings_file( ).
+    read table me->workbook_relations with key type = if_fdt_xl_types=>ooxml_relationship_shrdstr into rel_s_str.
+    if rel_s_str is initial.
+      " No chance... giving up
+      exit.
+    endif.
+  endif.
+
+  try.
+      x_file = me->if_fdt_doc_pkg~get_file_as_xstring( workbook_folder && rel_s_str-target ).
+      call transformation fdt_xl_get_shared_strings
+            source xml x_file
+            result shared_strings = shared_strings.
+    catch cx_fdt_excel_core.
+      " Error msg
+      exit.
+  endtry.
+
+  loop at shared_strings into comp_string.
+    if comp_string eq string.
+      index = sy-tabix.
+      exit.
+    endif.
+  endloop.
+
+  if index > 0.
+    " Found string, setting index correction and return
+    index = index - 1.
+    exit.
+  endif.
+
+* Add shared string to sharedStrings XML table.
+  data:
+        shared_xml_document type ref to if_ixml_document,
+        sst_node            type ref to if_ixml_node,
+        sst_element         type ref to if_ixml_element,
+        si_element          type ref to if_ixml_element,
+        si_node_collection  type ref to if_ixml_node_collection,
+        t_element           type ref to if_ixml_element,
+        t_text              type ref to if_ixml_text.
+
+  shared_xml_document = parse_xml( x_file ).
+
+  if shared_xml_document is initial.
+    exit.
+  endif.
+
+  sst_node = shared_xml_document->get_first_child( ).
+  sst_element ?= sst_node->query_interface( ixml_iid_element ).
+  si_element = shared_xml_document->create_element_ns( 'si' ).
+  t_element = shared_xml_document->create_element_ns( 't' ).
+  t_text = shared_xml_document->create_text( string ).
+  t_element->append_child( t_text ).
+  si_element->append_child( t_element ).
+  sst_node->append_child( si_element ).
+  si_node_collection = sst_element->get_elements_by_tag_name_ns( name = 'si' uri = if_fdt_xl_types=>ns_ooxml_ssheet_main ).
+  index = si_node_collection->get_length( ) - 1.
+
+* Render and store shared strings XML
+  me->if_fdt_doc_pkg~set_xstring_as_file( abs_filename = workbook_folder && rel_s_str-target x_file = render_xml( shared_xml_document ) ).
+endmethod.
+
+
+METHOD get_range_itab_from_xmldoc.
+  DATA:
+    row_start      TYPE i,
+    row_end        TYPE i,
+    row_count      TYPE i,
+    col_start      TYPE i,
+    col_end        TYPE i,
+    col_count      TYPE i,
+    shared_strings TYPE STANDARD TABLE OF string,
+    cellxfs        TYPE STANDARD TABLE OF string,
+    numfmtid       LIKE LINE OF me->numfmtids.
+
+  TYPE-POOLS: ixml.
+
+  IF xml_doc IS INITIAL.
+    EXIT.
+  ENDIF.
+
+* Get shared strings
+  get_shared_strings( IMPORTING strings = shared_strings ).
+
+* Get styles table for number formats
+  get_cellxfs( IMPORTING cellxfs = cellxfs ).
+
+* Get dimensions of the range
+  get_col_and_row_from_a1_style(
+    EXPORTING
+      coordinate    = range_start
+    IMPORTING
+      column_number = col_start
+      row_number    = row_start ).
+  get_col_and_row_from_a1_style(
+    EXPORTING
+      coordinate    = range_end
+    IMPORTING
+      column_number = col_end
+      row_number    = row_end  ).
+
+  row_count = row_end - row_start + 1.
+  col_count = col_end - col_start + 1.
+
+* Create dynamic table
+  TYPE-POOLS : abap.
+  FIELD-SYMBOLS: <dyn_table> TYPE STANDARD TABLE,
+                 <dyn_wa>    TYPE any.
+  DATA:
+    dy_table TYPE REF TO data,
+    dy_line  TYPE REF TO data,
+    xfc      TYPE lvc_s_fcat,
+    ifc      TYPE lvc_t_fcat.
+
+  DO col_count TIMES.
+    CLEAR xfc.
+    xfc-fieldname = convert_i_to_column( col_start + sy-index  - 1 ).
+    xfc-datatype =  'g'.
+    xfc-inttype = 'g'.
+    xfc-intlen =  0.
+    APPEND xfc TO ifc.
+  ENDDO.
+
+  CALL METHOD cl_alv_table_create=>create_dynamic_table
+    EXPORTING
+      it_fieldcatalog           = ifc " Field Catalog
+    IMPORTING
+      ep_table                  = dy_table " Pointer to Dynamic Data Table
+    EXCEPTIONS
+      generate_subpool_dir_full = 1
+      OTHERS                    = 2.
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+               WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+  ENDIF.
+
+  ASSIGN dy_table->* TO <dyn_table>.
+* Create dynamic work area and assign to FS
+  CREATE DATA dy_line LIKE LINE OF <dyn_table>.
+  ASSIGN dy_line->* TO <dyn_wa>.
+
+  FIELD-SYMBOLS:
+    <dyn_row_count> TYPE any,
+    <dyn_column>    TYPE any.
+
+* Process XML
+  DATA:
+    row            TYPE REF TO if_ixml_node,
+    rows           TYPE REF TO if_ixml_node_collection,
+    row_iterator   TYPE REF TO if_ixml_node_iterator,
+    row_element    TYPE REF TO if_ixml_element,
+    col            TYPE REF TO if_ixml_node,
+    cols           TYPE REF TO if_ixml_node_collection,
+    col_element    TYPE REF TO if_ixml_element,
+    col_iterator   TYPE REF TO if_ixml_node_iterator,
+    current_column TYPE string,
+    current_row    TYPE i,
+    style_id       TYPE string,
+    cell_value     TYPE string,
+    cell_string_id TYPE string,
+    cell_element   TYPE REF TO if_ixml_element,
+    loopcount      TYPE i.
+
+
+* Get a collection of rows
+  rows = xml_doc->get_elements_by_tag_name_ns( name = 'row'  uri = if_fdt_xl_types=>ns_ooxml_ssheet_main ).
+  IF rows->get_length( ) = 0.
+    " No columns to process, leaving
+    EXIT.
+  ENDIF.
+  row_iterator = rows->create_iterator( ).
+  row = row_iterator->get_next( ).
+
+
+* Find start row
+  TRY.
+      WHILE row IS NOT INITIAL AND get_attr_from_node( iv_name  = 'r'  io_node  = row ) NE row_start.
+        row = row_iterator->get_next( ).
+      ENDWHILE.
+    CATCH cx_root.
+      " Start row not found in sheet... leaving
+      EXIT.
+  ENDTRY.
+
+  WHILE row IS NOT INITIAL AND get_attr_from_node( iv_name = 'r' io_node = row ) LE row_end .
+    loopcount = loopcount + 1.
+    CLEAR dy_line.
+    UNASSIGN <dyn_wa>.
+    CREATE DATA dy_line LIKE LINE OF <dyn_table>.
+    ASSIGN dy_line->* TO <dyn_wa>.
+
+    row_element ?= row->query_interface( ixml_iid_element ).
+    current_row = get_attr_from_node( iv_name = 'r' io_node = row ) - row_start + 1 .
+    " Keep empty rows in spreadsheet
+    WHILE loopcount < current_row.
+      INSERT <dyn_wa> INTO <dyn_table> INDEX loopcount.
+      loopcount = loopcount + 1.
+    ENDWHILE.
+
+    cols = row_element->get_elements_by_tag_name_ns( name = 'c' uri = if_fdt_xl_types=>ns_ooxml_ssheet_main ).
+    IF cols->get_length( ) = 0.
+      " This row contains no column/values, insert empty line and continue
+      INSERT <dyn_wa> INTO <dyn_table> INDEX current_row.
+      row = row_iterator->get_next( ).
+      CONTINUE.
+    ELSE.
+      col_iterator = cols->create_iterator( ).
+      col = col_iterator->get_next( ).
+    ENDIF.
+    "Find start col
+    TRY.
+        DO.
+          IF convert_column_to_i( extract_col_from_a1_style( get_attr_from_node( iv_name = 'r' io_node = col ) ) ) >= col_start.
+            EXIT.
+          ENDIF.
+          col = col_iterator->get_next( ).
+        ENDDO.
+      CATCH cx_root.
+        EXIT.
+    ENDTRY.
+
+    WHILE col IS NOT INITIAL AND convert_column_to_i( extract_col_from_a1_style( get_attr_from_node( iv_name = 'r' io_node = col ) ) ) LE col_end.
+      col_element ?= col->query_interface( ixml_iid_element ).
+      current_column = extract_col_from_a1_style( get_attr_from_node( iv_name = 'r' io_node = col ) ).
+      cell_element = col_element->find_from_name_ns( name = 'v'  uri = if_fdt_xl_types=>ns_ooxml_ssheet_main ).
+      IF cell_element IS NOT INITIAL.
+        cell_value = cell_element->get_value( ).
+        " Check cell type
+        IF get_attr_from_node( iv_name = 't' io_node = col ) = 's'.
+          cell_string_id = cell_value + 1.
+          READ TABLE shared_strings INDEX cell_string_id INTO cell_value.
+        ELSE.
+          " not a string value
+        ENDIF.
+        " Check format of cell value because of date/time representation
+        READ TABLE cellxfs INTO style_id INDEX ( get_attr_from_node( iv_name = 's' io_node = col ) + 1 ).
+        READ TABLE me->numfmtids INTO numfmtid WITH KEY id = style_id.
+        " Hook method for implementing other format representations:
+        cell_value = convert_cell_value_by_numfmt( cell_value = cell_value number_format = numfmtid-formatcode ).
+        ASSIGN COMPONENT current_column OF STRUCTURE <dyn_wa> TO <dyn_column>.
+        " write cell_value.
+        <dyn_column> = cell_value.
+*      else.
+*        " No value, insert empty value anyway
+*        assign component current_column of structure <dyn_wa> to <dyn_column>.
+*        " write empty cell_value.
+*        <dyn_column> = ''.
+      ENDIF." Cell element is not initial
+
+      col = col_iterator->get_next( ).
+    ENDWHILE." Cols
+    INSERT <dyn_wa> INTO <dyn_table> INDEX current_row.
+    row = row_iterator->get_next( ).
+  ENDWHILE.
+
+  itab = dy_table.
+
+ENDMETHOD.
+
+
+method GET_SHARED_STRINGS.
+* This method loads the shared strings when required for the first time.
+  if me->mt_shared_strings is initial.
+    me->load_shared_strings( ).
+  endif.
+  strings = me->mt_shared_strings.
+endmethod."#EC CI_VALPAR
+
+
+method GET_WORKSHEET_BY_ID.
+  data w_sheet type ooxml_worksheet.
+
+  if me->worksheets is initial.
+    MESSAGE E003(FDT_EXCEL_CORE).
+    "message 'Worksheets not loaded.' type 'I' display like 'E'.
+    exit.
+  endif.
+
+* Get the appropriate sheet from the table
+  read table me->worksheets into w_sheet with key id = worksheet_id.
+  if w_sheet is initial.
+    "data msg type string.
+    "msg = `Sheet (` && worksheet_id && `) not found`.
+    "message msg type 'I' display like 'E'.
+    MESSAGE E004(FDT_EXCEL_CORE) with worksheet_id.
+    exit.
+  endif.
+
+* Get the sheet
+  try.
+      xsheet = me->if_fdt_doc_pkg~get_file_as_xstring( me->workbook_folder && w_sheet-location ).
+  catch cx_fdt_excel_core.
+    MESSAGE E005(FDT_EXCEL_CORE).
+    "message 'Unable to load worksheet.' type 'I' display like 'E'.
+    exit.
+  endtry.
+endmethod.
+
+
+method GET_WORKSHEET_BY_NAME.
+  data w_sheet type ooxml_worksheet.
+
+  if me->worksheets is initial.
+    MESSAGE E003(FDT_EXCEL_CORE).
+    "message 'Worksheets not loaded.' type 'I' display like 'E'.
+    exit.
+  endif.
+
+* Get the appropriate sheet from the table
+  read table me->worksheets into w_sheet with key name = worksheet_name.
+  if w_sheet is initial.
+    "data msg type string.
+    "msg = `Sheet (` && worksheet_name && `) not found`.
+    "message msg type 'I' display like 'E'.
+    MESSAGE E004(FDT_EXCEL_CORE) with worksheet_name.
+    exit.
+  endif.
+
+* Get the sheet
+  try.
+      xsheet = me->if_fdt_doc_pkg~get_file_as_xstring( me->workbook_folder && w_sheet-location ).
+    catch cx_fdt_excel_core.
+      MESSAGE E005(FDT_EXCEL_CORE).
+      "message 'Unable to load worksheet.' type 'I' display like 'E'.
+      exit.
+  endtry.
+endmethod.
+
+
+method GET_WORKSHEET_NAMES.
+  data wa_ws like line of worksheets.
+
+  loop at me->worksheets into wa_ws.
+    append wa_ws-name to worksheet_names.
+  endloop.
+
+endmethod.
+
+
+method if_fdt_doc_spreadsheet~CREATE_DOCUMENT.
+  xdocument = cl_fdt_xl_spreadsheet=>create_document(
+                                              columns            = columns
+                                              columns_aux        = columns_aux
+                                              itab_aux_col_desc  = itab_aux_col_desc
+                                              it_dt_map_col      = it_dt_map_col
+                                              it_dt_map_col_desc = it_dt_map_col_desc
+                                              itab               = itab
+                                              name               = name
+                                              iv_call_type       = iv_call_type
+                                              is_alv_document    = abap_true
+                                              iv_sheet_name      = iv_sheet_name ).
+endmethod.
+
+
+method if_fdt_doc_spreadsheet~GET_CUSTOM_METADATA.
+  value = me->get_custom_metadata( name ).
+endmethod.
+
+
+method if_fdt_doc_spreadsheet~GET_ITAB_FOR_ALV_UPDATE.
+  itab = me->get_itab_for_alv_update( ).
+endmethod.
+
+
+method if_fdt_doc_spreadsheet~GET_ITAB_FROM_WORKSHEET.
+  itab = me->get_itab_from_sheet( EXPORTING worksheet_name  = worksheet_name
+                                            iv_caller       = iv_caller
+                                            iv_get_language = iv_get_language ).
+endmethod.
+
+
+method if_fdt_doc_spreadsheet~GET_MAPPING.
+  mapping = me->get_mapping( ).
+endmethod.
+
+
+method if_fdt_doc_spreadsheet~GET_NAMED_CELLS.
+  named_cells = me->get_named_cells( ).
+endmethod.
+
+
+method if_fdt_doc_spreadsheet~GET_NAMED_CELL_VALUE.
+  cell_value = me->get_named_cell( cell_name ).
+endmethod.
+
+
+method if_fdt_doc_spreadsheet~GET_NAMED_RANGES.
+  named_ranges = me->get_named_ranges( ).
+endmethod.
+
+
+method if_fdt_doc_spreadsheet~GET_NAMED_RANGE_ITAB.
+  itab = me->get_named_range_itab( range ).
+endmethod.
+
+
+method if_fdt_doc_spreadsheet~GET_WORKSHEET_NAMES.
+  me->get_worksheet_names( importing worksheet_names = worksheet_names ).
+endmethod.
+
+
+method if_fdt_doc_spreadsheet~SET_CUSTOM_METADATA.
+  me->set_custom_metadata( iv_name = name iv_value = value ).
+endmethod.
+
+
+method if_fdt_doc_spreadsheet~SET_MAPPING.
+  me->set_mapping( mapping ).
+endmethod.
+
+
+method if_fdt_doc_spreadsheet~SET_NAMED_CELL_VALUE.
+  me->set_named_cell_value( cell_name = cell_name  cell_value = cell_value  ).
+endmethod.
+
+
+method if_fdt_doc_spreadsheet~SET_NAMED_RANGE_VALUES.
+  me->set_named_range_values( range_name = range_name  itab = itab ).
+endmethod.
+
+
+method INIT_SHARED_STRINGS_FILE.
+  data:
+       converter     type ref to cl_abap_conv_out_ce,
+       xml           type string,
+       ct_override   type t_pod_ct_override,
+       rel_s_str     type t_pod_relation.
+
+  CONSTANTS: ss_content_type type string VALUE 'application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml',"#EC NOTEXT
+             ss_xml type string value 'sharedStrings.xml',"#EC NOTEXT
+             back_slash type string VALUE '/'."#EC NOTEXT
+  read table me->workbook_relations with key type = if_fdt_xl_types=>ooxml_relationship_shrdstr into rel_s_str.
+  if rel_s_str is not initial.
+    " Delete entry before adding new one.
+    delete table me->workbook_relations from rel_s_str.
+    clear rel_s_str.
+  endif.
+
+* Create the XML structure and add it to the document
+  xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`."#EC NOTEXT
+  CONCATENATE xml `<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"></sst>` into xml."#EC NOTEXT
+  "xml = xml && `<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"></sst>`.
+  converter = cl_abap_conv_out_ce=>create( ).
+  converter->write( data = xml ).
+  me->if_fdt_doc_pkg~set_xstring_as_file( abs_filename = workbook_folder && ss_xml  x_file = converter->get_buffer( )  )."#EC NOTEXT
+* Add a new package relation to the document
+  rel_s_str-id = 'rIdSharedStrings'."#EC NOTEXT
+  rel_s_str-target = 'sharedStrings.xml'."#EC NOTEXT
+  rel_s_str-type = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings'."#EC NOTEXT
+  append rel_s_str to me->workbook_relations.
+  me->store_workbook_relations( ).
+
+  read table me->content_types_overrides with key contenttype = ss_content_type into ct_override.
+  if ct_override is not initial.
+    CONCATENATE back_slash workbook_folder ss_xml INTO ct_override-partname.
+    "ct_override-partname = '/' && workbook_folder && 'sharedStrings.xml'.
+    modify table me->content_types_overrides from ct_override.
+  else.
+    CONCATENATE back_slash workbook_folder ss_xml INTO ct_override-partname.
+    "ct_override-partname = '/' && workbook_folder && 'sharedStrings.xml'.
+    ct_override-contenttype = ss_content_type.
+    append ct_override to me->content_types_overrides.
+  endif.
+  me->store_content_types( ).
+endmethod.
+
+
+  METHOD insert_empty_worksheet_row.
+
+    DATA: lo_row_element TYPE REF TO if_ixml_element.
+
+    lo_row_element = create_worksheet_row_base( io_sheet_xml_document = io_sheet_xml_document
+                                                iv_row = cv_row ).
+    io_sheet_data_node->append_child( lo_row_element ).
+    cv_row = cv_row + 1.
+
+  ENDMETHOD.
+
+
+method LOAD_DEFINED_NAMES.
+
+  types begin of struc_defined_names.
+  types name type string.
+  types reference type string.
+  types end of struc_defined_names.
+
+  types tab_defined_names type standard table of struc_defined_names.
+
+  data:
+        defined_names type tab_defined_names,
+        xworkbook     type xstring.
+
+
+  try.
+      xworkbook = me->if_fdt_doc_pkg~get_file_as_xstring( me->workbook_folder && me->workbook_filename ).
+    catch cx_fdt_excel_core.
+      exit.
+  endtry.
+
+  call transformation fdt_xl_get_defined_names
+      source xml xworkbook
+      result defined_names = defined_names.
+
+  if defined_names is initial.
+    " No named references in this woorkbook, nothing else to do so leaving...
+    exit.
+  endif.
+
+  data:
+        defined_name        type struc_defined_names,
+        named_cell          type struc_named_cell,
+        named_range         type struc_named_range,
+        ws_name             type string,                "Name of sheet
+        ws_match_results type match_result_tab,
+        ws_match         type match_result,
+        ws_off_1            type i,
+        ws_off_2            type i,
+        ws_split            type standard table of string,
+        reference           type string,
+        start_cell          type string,
+        end_cell            type string.
+
+  clear: me->named_cells, me->named_ranges.
+
+  loop at defined_names into defined_name.
+    find '#REF!' in defined_name-reference.
+    if sy-subrc = 0.
+      " Reference is not value... continue with next defined name
+      continue.
+    endif.
+    find '[' in defined_name-reference.
+    if sy-subrc = 0.
+      " Reference is external... continue with next defined name
+      continue.
+    endif.
+    clear: named_cell, named_range.
+
+    " Get the name of the worksheet
+    find all occurrences of `'` in defined_name-reference results ws_match_results.
+    if sy-subrc = 0.
+      " Sheetname contains ! and therefore it is escaped by '
+      read table ws_match_results into ws_match index 1.
+      ws_off_1 = ws_match-offset + 1.
+      read table ws_match_results into ws_match index 2.
+      ws_off_2 = ws_match-offset - 1.
+      ws_name = substring( val = defined_name-reference off = ws_off_1 len = ws_off_2 ).
+      reference = substring( val = defined_name-reference off = ws_off_2 + 3 len = strlen( defined_name-reference ) - ( ws_off_2 + 3 ) ).
+    else.
+      " Sheetname contains no ! so split at !
+      split defined_name-reference at '!' into ws_name reference.
+    endif.
+
+    if reference is initial or reference = ''.
+      " definedNamed must be a hidden one, set only value and continue
+      named_cell-name = defined_name-name.
+      named_cell-cell = ws_name.
+      append named_cell to me->named_cells.
+      continue.
+    endif.
+
+    replace all occurrences of '$' in reference with ''.
+
+    find ':' in reference.
+    if sy-subrc = 0.
+      " Defined name is a range
+      named_range-name = defined_name-name.
+      named_range-sheet_name = ws_name.
+      split reference at ':' into start_cell end_cell.
+      named_range-start_cell = start_cell.
+      named_range-end_cell = end_cell.
+      append named_range to me->named_ranges.
+    else.
+      " Defined name is a cell
+      named_cell-name = defined_name-name.
+      named_cell-sheet_name = ws_name.
+      named_cell-cell = reference.
+      append named_cell to me->named_cells.
+    endif.
+  endloop.
+
+  clear: named_cell, named_range.
+
+  " Get number format of defined cells
+  data:
+        cellxfs type standard table of string.
+
+  if me->numfmtids is initial.
+    " Number formats table not loaded
+    me->load_numfmtids( ).
+  endif.
+
+  get_cellxfs( importing cellxfs = cellxfs ).
+
+  " ToDo sort by sheet
+  field-symbols:
+                 <named_cell> like line of me->named_cells.
+  data:
+        num_id          type string,
+        numfmtid        type t_struc_numfmtid,
+        x_current_sheet type xstring,
+        xml_doc         type ref to if_ixml_document,
+        style_id        type i.
+
+  loop at me->named_cells assigning <named_cell> ." into named_cell.
+    if <named_cell>-sheet_name is not initial and <named_cell>-sheet_name <> ''.
+      x_current_sheet = me->get_worksheet_by_name( <named_cell>-sheet_name ).
+      xml_doc = parse_xml( x_current_sheet ).
+      style_id = get_cell_style_id( xml_doc = xml_doc cell_coordinate = <named_cell>-cell ).
+      read table cellxfs into num_id index ( style_id + 1 ).
+      read table me->numfmtids into numfmtid with key id = num_id.
+      <named_cell>-format = numfmtid-formatcode.
+    endif.
+  endloop.
+endmethod.
+
+
+method LOAD_NUMFMTIDS.
+  data format type t_struc_numfmtid.
+
+  clear me->numfmtids.
+  " Filling all OOXML predifended, language independend number formats !Not a straight numbering!
+  " According to 'Office Open XML Part 4 - Markup Language Reference, 3.8.30'
+  format-id = 0.
+  format-formatcode = `General`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 1.
+  format-formatcode = `0`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 2.
+  format-formatcode = `0.00`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 3.
+  format-formatcode = `#,##0`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 4.
+  format-formatcode = `#,##0.00`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 9.
+  format-formatcode = `0%`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 10.
+  format-formatcode = `0.00%`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 11.
+  format-formatcode = `0.00E+00`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 12.
+  format-formatcode = `# ?/?`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 13.
+  format-formatcode = `# ??/??`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 14.
+  format-formatcode = `mm-dd-yy`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 15.
+  format-formatcode = `d-mmm-yy`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 16.
+  format-formatcode = `d-mmm`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 17.
+  format-formatcode = `mmm-yy`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 18.
+  format-formatcode = `h:mm AM/PM`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 19.
+  format-formatcode = `h:mm:ss AM/PM`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 20.
+  format-formatcode = `h:mm`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 21.
+  format-formatcode = `h:mm:ss`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 22.
+  format-formatcode = `m/d/yy h:mm`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 37.
+  format-formatcode = `#,##0;(#,##0)`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 38.
+  format-formatcode = `#,##0;[Red](#,##0)`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 39.
+  format-formatcode = `#,##0.00;(#,##0.00)`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 40.
+  format-formatcode = `#,##0.00;[Red](#,##0.00)`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 45.
+  format-formatcode = `mm:ss`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 46.
+  format-formatcode = `[h]:mm:ss`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 47.
+  format-formatcode = `mmss.0`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 48.
+  format-formatcode = `##0.0E+0`."#EC NOTEXT
+  append format to me->numfmtids.
+  format-id = 49.
+  format-formatcode = `@`."#EC NOTEXT
+  append format to me->numfmtids.
+
+  data:
+        style_relation  type t_pod_relation,
+        x_style         type xstring,
+        custom_numfmts  like me->numfmtids.
+  read table me->workbook_relations with key type = if_fdt_xl_types=>ooxml_relationship_styles into style_relation.
+  if style_relation is initial.
+    "Nothing else to do, leaving.
+    exit.
+  endif.
+
+  try.
+    x_style = me->if_fdt_doc_pkg~get_file_as_xstring( workbook_folder && style_relation-target ).
+  catch cx_fdt_excel_core.
+    "Style XML file not found.
+    exit.
+  endtry.
+
+  call TRANSFORMATION fdt_xl_get_numfmtids
+    source xml x_style
+    result NUMFMTS = custom_numfmts.
+
+  append lines of custom_numfmts to me->numfmtids.
+
+endmethod.
+
+
+METHOD load_shared_strings.
+*  This method uses the transformation FDT_XL_GET_SHARED_STRINGS to get the
+*  the shared strings as table of strings
+  DATA: rel_s_str   TYPE t_pod_relation,
+        lv_abs_path TYPE String,
+        lx_file     TYPE xstring.
+
+  CHECK workbook_relations IS NOT INITIAL.
+  READ TABLE me->workbook_relations
+          WITH KEY type = if_fdt_xl_types=>ooxml_relationship_shrdstr INTO rel_s_str.
+
+  TRY.
+    CONCATENATE workbook_folder rel_s_str-target into lv_abs_path.
+      lx_file = me->if_fdt_doc_pkg~get_file_as_xstring( lv_abs_path ).
+      CALL TRANSFORMATION fdt_xl_get_shared_strings
+            SOURCE XML lx_file
+            RESULT shared_strings = me->mt_shared_strings.
+    CATCH cx_fdt_excel_core.
+      " Error msg
+  ENDTRY.
+ENDMETHOD.
+
+
+method LOAD_WORKBOOK.
+  data:
+        wb_rel      type t_pod_relation,
+        wb_rel_file type xstring,
+        parts       type table of string,
+        part        type string,
+        sp_cnt      type i.
+
+
+  if me->package_relations is initial.
+    exit.
+  endif.
+
+  " Set the default value for the date format
+  me->dateformat1904 = abap_false.
+
+  read table me->package_relations with key type = if_fdt_xl_types=>ooxml_relationship_office_doc into  wb_rel.
+
+  if wb_rel is initial.
+    exit.
+  endif.
+
+  split wb_rel-target at '/' into table parts.
+
+  describe table parts lines sp_cnt.
+  read table parts index sp_cnt into me->workbook_filename.
+
+  while sy-index < sp_cnt.
+    read table parts index sy-index into part.
+    me->workbook_folder = me->workbook_folder && part && '/'.
+  endwhile.
+
+  if me->workbook_folder is initial.
+    exit.
+  endif.
+
+  try.
+      wb_rel_file = me->if_fdt_doc_pkg~get_file_as_xstring( workbook_folder && gc_rels_path && workbook_filename && gc_rels_extn ).
+      call transformation FDT_XL_GET_RELATIONS
+          source xml wb_rel_file
+          result relations = me->workbook_relations
+          .
+    catch cx_fdt_excel_core.
+      " 'File  ' && workbook_folder && '/_rels/' && workbook_filename && '.rels not found in package'
+      MESSAGE E007(FDT_EXCEL_CORE) WITH workbook_folder workbook_filename.
+  endtry.
+
+endmethod.
+
+
+METHOD load_worksheets.
+
+  DATA:
+        x_workbook    TYPE xstring,
+        w_sheet       TYPE ooxml_worksheet,
+        w_sheet_n     TYPE ooxml_worksheet,
+        w_sheets      TYPE ooxml_worksheets,
+        w_relation    TYPE t_pod_relation,
+        is_df1904     TYPE string.
+
+
+  IF workbook_filename IS INITIAL OR workbook_folder IS INITIAL OR workbook_relations IS INITIAL.
+    MESSAGE e005(fdt_excel_core).
+    "message 'Worksheet cannot be loaded' type 'I' display like 'E'.
+    EXIT.
+  ENDIF.
+
+
+  TRY.
+      x_workbook = me->if_fdt_doc_pkg~get_file_as_xstring( me->workbook_folder && me->workbook_filename ).
+      CALL TRANSFORMATION fdt_xl_get_worksheets
+          SOURCE XML x_workbook
+          RESULT worksheets = me->worksheets.
+
+      CALL TRANSFORMATION fdt_xl_get_date_format
+        SOURCE XML x_workbook
+        RESULT dateformat_1904 = is_df1904.
+      IF is_df1904 = '1'.
+        me->dateformat1904 = abap_true.
+      ELSE.
+        me->dateformat1904 = abap_false.
+      ENDIF.
+
+    CATCH cx_fdt_excel_core cx_root.
+      "data msg_string type string.
+      "msg_string = 'File  ' && workbook_folder && workbook_filename && ' not found in package'.
+      "message msg_string type 'I' display like 'E'.
+      MESSAGE e009(fdt_excel_core) WITH workbook_filename workbook_folder.
+  ENDTRY.
+
+
+  IF me->worksheets IS INITIAL.
+    EXIT.
+  ENDIF.
+
+  LOOP AT me->worksheets INTO w_sheet.
+    READ TABLE me->workbook_relations INTO w_relation WITH KEY id = w_sheet-location.
+    w_sheet-location = w_relation-target.
+    APPEND w_sheet TO w_sheets.
+  ENDLOOP.
+
+  me->worksheets = w_sheets.
+
+
+ENDMETHOD.
+
+
+method OVERWRITE_WORKSHEET_BY_ID.
+  data w_sheet type ooxml_worksheet.
+
+  if me->worksheets is initial.
+    MESSAGE E003(FDT_EXCEL_CORE).
+    "message 'Worksheets not loaded.' type 'I' display like 'E'.
+    exit.
+  endif.
+
+* Get the appropriate sheet from the table
+  read table me->worksheets into w_sheet with key id = worksheet_id.
+  if w_sheet is initial.
+    "data msg type string.
+    "msg = `Sheet (` && worksheet_id && `) not found`.
+    "message msg type 'I' display like 'E'.
+    MESSAGE E004(FDT_EXCEL_CORE) WITH worksheet_id.
+    exit.
+  endif.
+
+* Overwrite the sheet
+  me->if_fdt_doc_pkg~set_xstring_as_file( abs_filename = me->workbook_folder && w_sheet-location x_file = xsheet ).
+endmethod.
+
+
+method OVERWRITE_WORKSHEET_BY_NAME.
+  data w_sheet type ooxml_worksheet.
+
+  if me->worksheets is initial.
+    MESSAGE E003(FDT_EXCEL_CORE).
+    "message 'Worksheets not loaded.' type 'I' display like 'E'.
+    exit.
+  endif.
+
+* Get the appropriate sheet from the table
+  read table me->worksheets into w_sheet with key name = worksheet_name.
+  if w_sheet is initial.
+    "data msg type string.
+    "msg = `Sheet (` && worksheet_name && `) not found`.
+    "message msg type 'I' display like 'E'.
+    MESSAGE E004(FDT_EXCEL_CORE) WITH worksheet_name.
+    exit.
+  endif.
+
+* Overwrite the sheet
+  me->if_fdt_doc_pkg~set_xstring_as_file( abs_filename = me->workbook_folder && w_sheet-location x_file = xsheet ).
+endmethod.
+
+
+method SET_CELL_VALUE_BY_XMLDOC.
+  data:
+        data_type       type ref to cl_abap_typedescr,
+        rows            type ref to if_ixml_node_collection,
+        row_iterator    type ref to if_ixml_node_iterator,
+        row             type ref to if_ixml_node,
+        row_element     type ref to if_ixml_element,
+        cells           type ref to if_ixml_node_collection,
+        cell_list       type ref to if_ixml_node_list,
+        cell_iterator   type ref to if_ixml_node_iterator,
+        cell            type ref to if_ixml_node,
+        cell_element    type ref to if_ixml_element,
+        value_element   type ref to if_ixml_element,
+        value_str       type string,
+        sheetdata_el    type ref to if_ixml_element,
+        filter          type ref to if_ixml_node_filter,
+        row_number      type i,
+        row_number_str  type string,
+        insert_pos      type i.
+  type-pools:
+               ixml.
+  field-symbols:
+                 <value> type any.
+
+  if xml_doc is initial or cell_coordinate is initial or value is initial.
+    " Nothing to do, great... leaving
+    exit.
+  endif.
+
+  " Find out which data type to set
+  assign value->* to <value>.
+  data_type = cl_abap_typedescr=>describe_by_data_ref( value ).
+
+  " Find cell to update
+  cells = xml_doc->get_elements_by_tag_name_ns( name = 'c' uri   = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main' ).
+  filter = xml_doc->create_filter_attribute( name = 'r'  value = cell_coordinate ).
+  cell_iterator = cells->create_iterator_filtered( filter ).
+  cell = cell_iterator->get_next( ).
+  if cell is initial.
+    " Cell not existing, create new one...
+    cell_element = xml_doc->create_element_ns( name = 'c' ).
+    cell_element->set_attribute( name = 'r' value = cell_coordinate ).
+
+    " ...and try to find at least the proper row
+    get_col_and_row_from_a1_style( exporting coordinate = cell_coordinate  importing row_number = row_number  ).
+    row_number_str = row_number.
+    cl_abap_string_utilities=>del_trailing_blanks( changing str = row_number_str ).
+    rows = xml_doc->get_elements_by_tag_name_ns( name = 'row'  uri = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main' ).
+    filter = xml_doc->create_filter_attribute( name = 'r'  value = row_number_str ).
+    row_iterator = rows->create_iterator_filtered( filter ).
+    row = row_iterator->get_next( ).
+    if row is initial.
+      " No proper row! Create new row and cell ...
+      row_element = xml_doc->create_element_ns( name = 'row' ).
+      row_element->set_attribute( name = 'r' value = row_number_str ).
+      row_element->append_child( cell_element ).
+
+      " ... and find position to insert
+      rows = xml_doc->get_elements_by_tag_name_ns( name = 'row'  uri = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main' ).
+      row_iterator = rows->create_iterator( ).
+      row = row_iterator->get_next( ).
+      while row is not initial and get_attr_from_node( iv_name = 'r' io_node = row ) < row_number.
+        row = row_iterator->get_next( ).
+        insert_pos = sy-index.
+      endwhile.
+
+      if row is initial.
+        " No row present at all! Append it to sheetData element
+        sheetdata_el = xml_doc->find_from_name_ns( name = 'sheetData'  uri = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main' ).
+        if sheetdata_el is initial.
+          " Not a correct sheet XML. Giving up...
+          exit.
+        endif.
+        sheetdata_el->append_child( row_element ).
+      else.
+        " Found rows. Now insert at proper position
+        data:
+              row_insert_pos  type ref to if_ixml_node,
+              row_parent      type ref to if_ixml_node.
+        row_insert_pos  = rows->get_item( insert_pos ).
+        row_parent      = row_insert_pos->get_parent( ).
+        row_parent->insert_child( new_child = row_element  ref_child = row_insert_pos ).
+      endif.
+    else. " Row is not initial... find position to insert cell_element
+      cell_list = row->get_children( ).
+      filter = xml_doc->create_filter_name( name = 'c' ).
+      cell_iterator = cell_list->create_iterator_filtered( filter ).
+      cell = cell_iterator->get_next( ).
+      while cell is not initial and get_col_from_a1_style( get_attr_from_node( iv_name = 'r' io_node = cell ) ) < get_col_from_a1_style( cell_coordinate ).
+        cell = cell_iterator->get_next( ).
+        insert_pos = sy-index.
+      endwhile.
+
+      if cell is initial.
+        " No cell at all
+        row->append_child( cell_element ).
+      else.
+        " Cell found, insert at proper position
+        data:
+              cell_insert_pos type ref to if_ixml_node,
+              cell_parent     type ref to if_ixml_node.
+        cell_insert_pos = cell_list->get_item( insert_pos ).
+        cell_parent     = cell_insert_pos->get_parent( ).
+        cell_parent->insert_child( new_child = cell_element  ref_child = cell_insert_pos ).
+      endif.
+    endif.
+
+  else. " Cell is not initial
+    cell_element ?= cell->query_interface( ixml_iid_element ).
+  endif.
+
+  " Reference to cell_element should be present here
+  if cell_element is initial.
+    exit.
+  endif.
+
+  value_element = cell_element->find_from_name_ns( name = 'v' uri = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main' ).
+  if value_element is initial.
+    " No value element present yet, create a new one
+    value_element = xml_doc->create_element_ns( name = 'v' ).
+    cell_element->append_child( value_element ).
+  endif.
+
+  " Convert value to string
+  value_str = <value>.
+  " Set attribute 't' depending on data type
+  if data_type->type_kind = 'I' or data_type->type_kind = 'N' or data_type->type_kind = 'F' or data_type->type_kind = 'P'. "#EC CI_INT8_OK
+    if data_type->type_kind = 'P' and <value> < 0.
+      <value> = abs( <value> ).
+      value_str = '-' && <value>.
+    endif.
+    " Number
+*    cell_element->set_attribute( name = 's' value = '1' ).
+  else.
+    " String
+    cell_element->set_attribute( name = 't' value = 's' ).
+    value_str = get_or_create_index_shared_str( value_str ).
+  endif.
+  cl_abap_string_utilities=>del_trailing_blanks( changing str = value_str ).
+  value_element->set_value( value_str ).
+
+endmethod.
+
+
+METHOD set_help_dt_sheetdata.
+  DATA:
+         sheetdata_node TYPE REF TO  if_ixml_node,
+         dimension      TYPE         string,
+         t_col          TYPE         abap_component_tab,
+         s_col          LIKE LINE OF t_col,
+         row_element    TYPE REF TO  if_ixml_element,    " <row>
+         c_element      TYPE REF TO  if_ixml_element,    " <c> = cell
+         v_element      TYPE REF TO  if_ixml_element,    " <v> = cell value
+         v_text         TYPE REF TO  if_ixml_text,       " text value of <v>.
+         col_typedescr  TYPE REF TO  cl_abap_datadescr,  " Type description for column
+         lv_long        TYPE         c LENGTH 60,
+         lv_short       TYPE         c LENGTH 25,
+         content        TYPE         string,                    " Actual cell content as string
+         row_count      TYPE         string,                    " Row count as string
+         lv_string      TYPE string.
+* row no - &1
+* column no - &2
+* cell value - &3
+* style - &4
+  DEFINE _set_help_string .
+    row_element = sheet_xml_document->create_element_ns( 'row' ).
+    row_element->set_attribute_ns( name = 'r' value = &1 ).
+    row_element->set_attribute_ns( name = 'spans' value = '1:3' ).
+    row_element->set_attribute_ns( name = 's' value = &4 ).
+    "row_element->set_attribute_ns( name = 'customFormat' value = '1' ).
+
+    c_element = sheet_xml_document->create_element_ns( 'c' ).
+    c_element->set_attribute_ns( name = 'r' value = convert_i_to_column( &2 ) && &1 ).
+    c_element->set_attribute_ns( name = 's' value = &4 ).
+    c_element->set_attribute_ns( name = 't' value = 's' ). " String value
+    v_element = sheet_xml_document->create_element_ns( 'v' ).
+    lv_string = &3.
+    content = set_shared_string_buffer( lv_string ).
+    v_text = sheet_xml_document->create_text( content ).
+    v_element->append_child( v_text ).
+    c_element->append_child( v_element ).
+    row_element->append_child( c_element ).
+    sheetdata_node->append_child( row_element ).
+  END-OF-DEFINITION.
+
+*   Enabling iXML support
+  TYPE-POOLS: ixml.
+  CLASS cl_ixml DEFINITION LOAD.
+
+  "Set columns
+  col_typedescr ?= cl_abap_typedescr=>describe_by_data( lv_long  ).
+  s_col-name = 'First'.                                     "#EC NOTEXT
+  s_col-type = col_typedescr.
+  APPEND s_col TO t_col.
+  col_typedescr ?= cl_abap_typedescr=>describe_by_data( lv_short  ).
+  s_col-name = 'Second'.                                    "#EC NOTEXT
+  s_col-type = col_typedescr.
+  APPEND s_col TO t_col.
+  s_col-name = 'Third'.                                     "#EC NOTEXT
+  s_col-type = col_typedescr.
+  APPEND s_col TO t_col.
+
+* Prepare XML
+  TRY.
+      "dimension = 'A1:' && me->convert_i_to_column( col_count ) && rows.
+      dimension = 'A1:C39'.
+      me->set_worksheet_dimension( sheet_xml_document = sheet_xml_document dimension = dimension ).
+      me->set_worksheet_cols( sheet_xml_document = sheet_xml_document column_description_tab = t_col ).
+      sheetdata_node = me->clear_worksheet_sheetdata( sheet_xml_document ).
+    CATCH cx_root.
+      EXIT.
+  ENDTRY.
+
+  IF sheetdata_node IS INITIAL.
+    EXIT.
+  ENDIF.
+  "Setting the help data into a table
+  _set_help_string  '1' '2' 'Guidelines for Entering Decision Table Data'(012) '9'. "#EC NOTEXT
+  "_set_help_string  '2' '1' '' '0'.                         "#EC NOTEXT
+  _set_help_string  '3' '1' 'Condition columns take range expression as their cell values'(013) '1'. "#EC NOTEXT
+  "_set_help_string  '4' '1' '' '0'.                         "#EC NOTEXT
+  _set_help_string  '4' '1' 'Range Option'(014) '1'.        "#EC NOTEXT
+  _set_help_string  '4' '2' 'Pattern'(015) '1'.             "#EC NOTEXT
+  _set_help_string  '4' '3' 'Example'(016) '1'.             "#EC NOTEXT
+
+  _set_help_string '5' '1' 'contains any'(017) '0'.         "#EC NOTEXT
+  lv_string = 'contains any'(017) && ` &1`.                 "#EC NOTEXT
+  _set_help_string '5' '2' lv_string '0'.                   "#EC NOTEXT
+  lv_string = 'contains any'(017) && ` abc`.                "#EC NOTEXT
+  _set_help_string '5' '3' lv_string '0'.                   "#EC NOTEXT
+
+  _set_help_string '6' '1' 'contains only'(023) '0'.        "#EC NOTEXT
+  lv_string = 'contains only'(023) && ` &1`.                "#EC NOTEXT
+  _set_help_string '6' '2' lv_string '0'.                   "#EC NOTEXT
+  lv_string = 'contains only'(023) && ` abc`.               "#EC NOTEXT
+  _set_help_string '6' '3' lv_string '0'.                   "#EC NOTEXT
+
+  _set_help_string '7' '1' 'contains string'(024) '0'.      "#EC NOTEXT
+  lv_string = 'contains string'(024) && ` &1`.              "#EC NOTEXT
+  _set_help_string '7' '2' lv_string '0'.                   "#EC NOTEXT
+  lv_string = 'contains string'(024) && ` abc`.             "#EC NOTEXT
+  _set_help_string '7' '3' lv_string '0'.                   "#EC NOTEXT
+
+  _set_help_string '8' '1' 'currency equals'(026) '0'.      "#EC NOTEXT
+  _set_help_string '8' '2' 'currency equals'(026) '0'.      "#EC NOTEXT
+  lv_string = 'currency equals'(026) && ` EUR`.             "#EC NOTEXT
+  _set_help_string '8' '3' lv_string '0'.                   "#EC NOTEXT
+
+  _set_help_string '9' '1' 'does not contain any'(029) '0'. "#EC NOTEXT
+  lv_string = 'contains not any'(030) && ` &1`.             "#EC NOTEXT
+  _set_help_string '9' '2' lv_string '0'.                   "#EC NOTEXT
+  lv_string = 'contains not any'(030) && ` abc`.            "#EC NOTEXT
+  _set_help_string '9' '3' lv_string '0'.                   "#EC NOTEXT
+
+  _set_help_string '10' '1' 'does not contain only'(032) '0'. "#EC NOTEXT
+  lv_string = 'contains not only'(033) && ` &1`.            "#EC NOTEXT
+  _set_help_string '10' '2' lv_string '0'.                  "#EC NOTEXT
+  lv_string = 'contains not only'(033) && ` abc`.           "#EC NOTEXT
+  _set_help_string '10' '3' lv_string '0'.                  "#EC NOTEXT
+
+  _set_help_string '11' '1' 'does not contain string'(035) '0'. "#EC NOTEXT
+  lv_string = 'contains no string'(036) && ` &1`.           "#EC NOTEXT
+  _set_help_string '11' '2' lv_string '0'.                  "#EC NOTEXT
+  lv_string = 'contains no string'(036) && ` abc`.          "#EC NOTEXT
+  _set_help_string '11' '3' lv_string '0'.                  "#EC NOTEXT
+
+  _set_help_string '12' '1' 'does not match pattern'(038) '0'. "#EC NOTEXT
+  lv_string = '[<>&' && 'pattern'(039) && `]`.              "#EC NOTEXT
+  _set_help_string '12' '2' lv_string '0'.                  "#EC NOTEXT
+  lv_string = '[<>' && 'pattern'(039) && `]`.               "#EC NOTEXT
+  _set_help_string '12' '3' lv_string '0'.                  "#EC NOTEXT
+
+  lv_string = 'ends with'(041) && ` text`.                  "#EC NOTEXT
+  _set_help_string '13' '1' 'ends with text'(041) '0'.      "#EC NOTEXT
+  lv_string = 'ends with'(041) && ` &1`.                    "#EC NOTEXT
+  _set_help_string '13' '2' lv_string '0'.                  "#EC NOTEXT
+  lv_string = 'ends with'(041) && ` abc`.                   "#EC NOTEXT
+  _set_help_string '13' '3' lv_string '0'.                  "#EC NOTEXT
+
+  _set_help_string '14' '1' 'is between'(042) '0'.          "#EC NOTEXT
+  _set_help_string '14' '2' '[&1..&2]' '0'.                 "#EC NOTEXT
+  _set_help_string '14' '3' '[0..15]'  '0'.                 "#EC NOTEXT
+
+  _set_help_string '15' '1' 'is equal to'(043) '0'.         "#EC NOTEXT
+  _set_help_string '15' '2' '=&1' '0'.                       "#EC NOTEXT
+  _set_help_string '15' '3' '=abc' '0'.                      "#EC NOTEXT
+
+  _set_help_string '16' '1' 'is greater than'(044) '0'.     "#EC NOTEXT
+  _set_help_string '16' '2' '> &1' '0'.                     "#EC NOTEXT
+  _set_help_string '16' '3' '> 100' '0'.                    "#EC NOTEXT
+
+  _set_help_string '17' '1' 'is greater than or equal to'(045) '0'. "#EC NOTEXT
+  _set_help_string '17' '2' '>= &1'  '0'.                   "#EC NOTEXT
+  _set_help_string '17' '3' '>=200' '0'.                    "#EC NOTEXT
+
+  _set_help_string '18' '1' 'is initial'(046) '0'.          "#EC NOTEXT
+  _set_help_string '18' '2' 'is initial'(046) '0'.          "#EC NOTEXT
+  _set_help_string '18' '3' 'is initial'(046) '0'.          "#EC NOTEXT
+
+  _set_help_string '19' '1' 'is less than'(047) '0'.        "#EC NOTEXT
+  _set_help_string '19' '2' '< &1' '0'.                     "#EC NOTEXT
+  _set_help_string '19' '3' '<100' '0'.                     "#EC NOTEXT
+
+  _set_help_string '20' '1' 'is less than or equal to'(048) '0'. "#EC NOTEXT
+  _set_help_string '20' '2' '<= &1' '0'.                    "#EC NOTEXT
+  _set_help_string '20' '3' '<=200' '0'.                    "#EC NOTEXT
+
+  _set_help_string '21' '1' 'is not between'(049) '0'.      "#EC NOTEXT
+  _set_help_string '21' '2' '<&1;>&2' '0'.                  "#EC NOTEXT
+  _set_help_string '21' '3' '<12;>50' '0'.                  "#EC NOTEXT
+
+  _set_help_string '22' '1' 'is not equal to'(050) '0'.     "#EC NOTEXT
+  _set_help_string '22' '2' '<>&1' '0'.                     "#EC NOTEXT
+  _set_help_string '22' '3' '<>abc' '0'.                    "#EC NOTEXT
+
+  _set_help_string '23' '1' 'is not initial'(051) '0'.      "#EC NOTEXT
+  _set_help_string '23' '2' 'is not initial'(051) '0'.      "#EC NOTEXT
+  _set_help_string '23' '3' 'is not initial'(051) '0'.      "#EC NOTEXT
+*
+*  _set_help_string '25' '1' 'is not supplied' '0'.          "#EC NOTEXT
+*  _set_help_string '25' '2' 'is not supplied' '0'.          "#EC NOTEXT
+*  _set_help_string '25' '3' 'is not supplied' '0'.          "#EC NOTEXT
+
+  _set_help_string '24' '1' 'is not valid'(052) '0'.        "#EC NOTEXT
+  _set_help_string '24' '2' 'is not valid'(052) '0'.        "#EC NOTEXT
+  _set_help_string '24' '3' 'is not valid'(052) '0'.        "#EC NOTEXT
+*
+*  _set_help_string '27' '1' 'is supplied' '0'.              "#EC NOTEXT
+*  _set_help_string '27' '2' 'is supplied' '0'.              "#EC NOTEXT
+*  _set_help_string '27' '3' 'is supplied' '0'.              "#EC NOTEXT
+
+  _set_help_string '25' '1' 'is valid'(053) '0'.            "#EC NOTEXT
+  _set_help_string '25' '2' 'is valid'(053) '0'.            "#EC NOTEXT
+  _set_help_string '25' '3' 'is valid'(053) '0'.            "#EC NOTEXT
+
+  _set_help_string '26' '1' 'matches pattern'(054) '0'.     "#EC NOTEXT
+  lv_string = '[&' && 'pattern'(039) && `]`.                "#EC NOTEXT
+  _set_help_string '26' '2' lv_string '0'.                  "#EC NOTEXT
+  lv_string = '[' && 'pattern'(039) && `]`.                 "#EC NOTEXT
+  _set_help_string '26' '3' lv_string '0'.                  "#EC NOTEXT
+
+  lv_string = 'starts with'(055) && ` text`.                "#EC NOTEXT
+  _set_help_string '27' '1' lv_string '0'.                  "#EC NOTEXT
+  lv_string = 'starts with'(055) && ` &1`.                  "#EC NOTEXT
+  _set_help_string '27' '2' lv_string '0'.                  "#EC NOTEXT
+  lv_string = 'starts with'(055) && ` abc`.                 "#EC NOTEXT
+  _set_help_string '27' '3' lv_string '0'.                  "#EC NOTEXT
+
+  _set_help_string '28' '1' 'unit equals'(056) '0'.         "#EC NOTEXT
+  _set_help_string '28' '2' 'unit equals'(056) '0'.         "#EC NOTEXT
+  lv_string = 'unit equals'(056) && ` KG`.                  "#EC NOTEXT
+  _set_help_string '28' '3' lv_string '0'.                  "#EC NOTEXT
+
+  _set_help_string '30' '1' 'Result columns take constant expression as their cell values'(057) '1'. "#EC NOTEXT
+
+  _set_help_string '32' '1' 'Range Option'(058) '1'.        "#EC NOTEXT
+  _set_help_string '32' '2' 'Pattern'(059) '1'.             "#EC NOTEXT
+  _set_help_string '32' '3' 'Example'(060) '1'.             "#EC NOTEXT
+
+  _set_help_string '33' '1' 'or'(061) '0'.                  "#EC NOTEXT
+  _set_help_string '33' '2' '&1 ; &2' '0'.                 "#EC NOTEXT
+  _set_help_string '33' '3' 'EUR ; USD' '0'.               "#EC NOTEXT
+
+  _set_help_string '34' '1' '(and) unless'(062)  '0'.       "#EC NOTEXT
+  lv_string = 'exclude'(063) && ` &1`.                      "#EC NOTEXT
+  _set_help_string '34' '2' 'exclude &1'  '0'.              "#EC NOTEXT
+  lv_string = 'exclude'(063) && ` JPY`.                     "#EC NOTEXT
+  _set_help_string '34' '3' 'exclude JPY' '0'.              "#EC NOTEXT
+
+
+  _set_help_string '36' '1' 'Result Column Type'(064) '1'.  "#EC NOTEXT
+  _set_help_string '36' '2' 'Pattern'(059) '1'.             "#EC NOTEXT
+  _set_help_string '36' '3' 'Example'(060) '1'.             "#EC NOTEXT
+
+  _set_help_string '37' '1' 'Text'(065) '0'.                "#EC NOTEXT
+  _set_help_string '37' '2' '&1'  '0'.                      "#EC NOTEXT
+  _set_help_string '37' '3' 'abc' '0'.                      "#EC NOTEXT
+
+  _set_help_string '38' '1' 'Number'(066) '0'.              "#EC NOTEXT
+  _set_help_string '38' '2' 'NUMBER'(067) '0'.              "#EC NOTEXT
+  _set_help_string '38' '3' '123 , 200.50' '0'.             "#EC NOTEXT
+
+  _set_help_string '39' '1' 'Boolean'(068) '0'.             "#EC NOTEXT
+  _set_help_string '39' '2' 'TRUE/FALSE (change the cell format to Text before entering values)'(069) '0'. "#EC NOTEXT
+  _set_help_string '39' '3' 'TRUE,FALSE'(070) '0'.          "#EC NOTEXT
+
+  _set_help_string '40' '1' 'Amount'(071) '0'.              "#EC NOTEXT
+  _set_help_string '40' '2' 'NUMBER CURRENCY'(072) '0'.     "#EC NOTEXT
+  _set_help_string '40' '3' '100 USD' '0'.                  "#EC NOTEXT
+
+  _set_help_string '41' '1' 'Quantity'(073) '0'.            "#EC NOTEXT
+  _set_help_string '41' '2' 'NUMBER UNIT'(074) '0'.         "#EC NOTEXT
+  _set_help_string '41' '3' '100 KG' '0'.                   "#EC NOTEXT
+
+  _set_help_string '42' '1' 'Timepoint - Date Format'(075) '0'. "#EC NOTEXT
+  _set_help_string '42' '2' 'YYYY-MM-DD' '0'.               "#EC NOTEXT
+  _set_help_string '42' '3' '2011-01-06' '0'.               "#EC NOTEXT
+
+  _set_help_string '43' '1' 'Timepoint - Date Time Format'(076) '0'. "#EC NOTEXT
+  _set_help_string '43' '2' 'YYYY-MM-DDThh:mm:ss' '0'.      "#EC NOTEXT
+  _set_help_string '43' '3' '2011-01-06T10:10:10' '0'.      "#EC NOTEXT
+
+  _set_help_string '44' '1' 'Timepoint - Timestamp Format'(077) '0'. "#EC NOTEXT
+  _set_help_string '44' '2' 'YYYY-MM-DDThh:mm:ssZ' '0'.     "#EC NOTEXT
+  _set_help_string '44' '3' '2011-01-06T10:10:10Z' '0'.     "#EC NOTEXT
+
+  _set_help_string '45' '1' 'Timepoint - Time Format'(078) '0'. "#EC NOTEXT
+  _set_help_string '45' '2' 'Thh:mm:ss' '0'.                "#EC NOTEXT
+  _set_help_string '45' '3' 'T10:10:10' '0'.                "#EC NOTEXT
+
+  _set_help_string '46' '1' 'Timepoint - Date Time with offset Format' '0'. "#EC NOTEXT
+  _set_help_string '46' '2' 'YYYY-MM-DDThh:mm:ss[+|-]hh:mm' '0'. "#EC NOTEXT
+  _set_help_string '46' '3' '2011-01-06T10:10:10+10:00' '0'. "#EC NOTEXT
+
+  _set_help_string '48' '1' 'Language'(082) '0'.            "#EC NOTEXT
+  _set_help_string '48' '2' sy-langu '0'.                   "#EC NOTEXT
+
+  DATA :  lv_test_string        TYPE c LENGTH 10,                               "Start of note 2998534
+          lv_test_num           TYPE p LENGTH 4 DECIMALS 2 VALUE '12345.67'.
+
+* determine the actual decimal and thousand separator
+  WRITE lv_test_num TO lv_test_string.
+
+  _set_help_string '49' '1' 'Decimal Notation - Thousands and Decimal Separator'(086) '0'.  "#EC NOTEXT
+  _set_help_string '49' '2' lv_test_string '0'.             "#EC NOTEXT         "End of note 2998534
+
+ENDMETHOD.
+
+
+METHOD set_help_sim_sheetdata.
+  DATA:
+         sheetdata_node TYPE REF TO  if_ixml_node,
+         dimension      TYPE         string,
+         t_col          TYPE         abap_component_tab,
+         s_col          LIKE LINE OF t_col,
+         row_element    TYPE REF TO  if_ixml_element,    " <row>
+         c_element      TYPE REF TO  if_ixml_element,    " <c> = cell
+         v_element      TYPE REF TO  if_ixml_element,    " <v> = cell value
+         v_text         TYPE REF TO  if_ixml_text,       " text value of <v>.
+         col_typedescr  TYPE REF TO  cl_abap_datadescr,  " Type description for column
+         lv_long        TYPE         c LENGTH 60,
+         lv_short       TYPE         c LENGTH 25,
+         content        TYPE         string,                    " Actual cell content as string
+         row_count      TYPE         string,                    " Row count as string
+         lv_string      TYPE         string.
+* row no - &1
+* column no - &2
+* cell value - &3
+* style - &4
+  DEFINE _set_help_string .
+    row_element = sheet_xml_document->create_element_ns( 'row' ).
+    row_element->set_attribute_ns( name = 'r' value = &1 ).
+    row_element->set_attribute_ns( name = 'spans' value = '1:3' ).
+    row_element->set_attribute_ns( name = 's' value = &4 ).
+    "row_element->set_attribute_ns( name = 'customFormat' value = '1' ).
+
+    c_element = sheet_xml_document->create_element_ns( 'c' ).
+    c_element->set_attribute_ns( name = 'r' value = convert_i_to_column( &2 ) && &1 ).
+    c_element->set_attribute_ns( name = 's' value = &4 ).
+    c_element->set_attribute_ns( name = 't' value = 's' ). " String value
+    v_element = sheet_xml_document->create_element_ns( 'v' ).
+    lv_string = &3.
+    content = set_shared_string_buffer( lv_string ).
+    v_text = sheet_xml_document->create_text( content ).
+    v_element->append_child( v_text ).
+    c_element->append_child( v_element ).
+    row_element->append_child( c_element ).
+    sheetdata_node->append_child( row_element ).
+  END-OF-DEFINITION.
+
+*   Enabling iXML support
+  TYPE-POOLS: ixml.
+  CLASS cl_ixml DEFINITION LOAD.
+
+  "Set columns
+  col_typedescr ?= cl_abap_typedescr=>describe_by_data( lv_long  ).
+  s_col-name = 'First'.                                     "#EC NOTEXT
+  s_col-type = col_typedescr.
+  APPEND s_col TO t_col.
+  col_typedescr ?= cl_abap_typedescr=>describe_by_data( lv_short  ).
+  s_col-name = 'Second'.                                    "#EC NOTEXT
+  s_col-type = col_typedescr.
+  APPEND s_col TO t_col.
+  s_col-name = 'Third'.                                     "#EC NOTEXT
+  s_col-type = col_typedescr.
+  APPEND s_col TO t_col.
+
+* Prepare XML
+  TRY.
+      "dimension = 'A1:' && me->convert_i_to_column( col_count ) && rows.
+      dimension = 'A1:C39'.
+      me->set_worksheet_dimension( sheet_xml_document = sheet_xml_document dimension = dimension ).
+      me->set_worksheet_cols( sheet_xml_document = sheet_xml_document column_description_tab = t_col ).
+      sheetdata_node = me->clear_worksheet_sheetdata( sheet_xml_document ).
+    CATCH cx_root.
+      EXIT.
+  ENDTRY.
+
+  IF sheetdata_node IS INITIAL.
+    EXIT.
+  ENDIF.
+  "Setting the help data into a table
+  _set_help_string  '1' '2' 'Guildelines to fill in the function simulation data'(012) '1'. "#EC NOTEXT
+  "_set_help_string  '2' '1' '' '0'.                         "#EC NOTEXT
+  _set_help_string  '3' '1' 'The first row contains all the the data object names from the context of the function.Fill in the data from the next row.'(079) '0'. "#EC NOTEXT
+  "_set_help_string  '4' '1' '' '0'.                         "#EC NOTEXT
+  _set_help_string  '5' '1' 'Data Type'(080) '1'.           "#EC NOTEXT
+  _set_help_string  '5' '2' 'Pattern'(059) '1'.             "#EC NOTEXT
+  _set_help_string  '5' '3' 'Example'(060) '1'.             "#EC NOTEXT
+  _set_help_string '6' '1' 'Text'(065) '0'.                 "#EC NOTEXT
+  _set_help_string '6' '2' '&1' '0'.                        "#EC NOTEXT
+  _set_help_string '6' '3' 'abc' '0'.                       "#EC NOTEXT
+  _set_help_string '7' '1' 'Number'(066) '0'.               "#EC NOTEXT
+  _set_help_string '7' '2' 'NUMBER'(067) '0'.               "#EC NOTEXT
+  _set_help_string '7' '3' '123 , 200.50' '0'.              "#EC NOTEXT
+  _set_help_string '8' '1' 'Boolean'(068) '0'.              "#EC NOTEXT
+  _set_help_string '8' '2' 'TRUE/FALSE (Also Change the Format of the cell to TEXT before entering values)'(069) '0'. "#EC NOTEXT
+  _set_help_string '8' '3' 'TRUE , FALSE'(070) '0'.         "#EC NOTEXT
+  _set_help_string '9' '1' 'Amount'(071) '0'.               "#EC NOTEXT
+  _set_help_string '9' '2' 'NUMBER CURRENCY'(072) '0'.      "#EC NOTEXT
+  _set_help_string '9' '3' '100 USD' '0'.                   "#EC NOTEXT
+  _set_help_string '10' '1' 'Quantity'(073) '0'.            "#EC NOTEXT
+  _set_help_string '10' '2' 'NUMBER UNIT'(074) '0'.         "#EC NOTEXT
+  _set_help_string '10' '3' '100 UNIT' '0'.                 "#EC NOTEXT
+  _set_help_string '11' '1' 'Timepoint - Date Format'(075) '0'. "#EC NOTEXT
+  _set_help_string '11' '2' 'YYYY-MM-DD' '0'.               "#EC NOTEXT
+  _set_help_string '11' '3' '2011-01-06' '0'.               "#EC NOTEXT
+  _set_help_string '12' '1' 'Timepoint - Date Time Format'(076) '0'. "#EC NOTEXT
+  _set_help_string '12' '2' 'YYYY-MM-DDThh:mm:ss' '0'.      "#EC NOTEXT
+  _set_help_string '12' '3' '2011-01-06T10:10:10' '0'.      "#EC NOTEXT
+  _set_help_string '13' '1' 'Timepoint - Timestamp Format'(077) '0'. "#EC NOTEXT
+  _set_help_string '13' '2' 'YYYY-MM-DDThh:mm:ssZ' '0'.     "#EC NOTEXT
+  _set_help_string '13' '3' '2011-01-06T10:10:10Z' '0'.     "#EC NOTEXT
+  _set_help_string '14' '1' 'Timepoint - Time Format'(078) '0'. "#EC NOTEXT
+  _set_help_string '14' '2' 'Thh:mm:ss' '0'.                "#EC NOTEXT
+  _set_help_string '14' '3' 'T10:10:10' '0'.                "#EC NOTEXT
+  _set_help_string '15' '1' 'Timepoint - Date Time with offset Format'(081) '0'. "#EC NOTEXT
+  _set_help_string '15' '2' 'YYYY-MM-DDThh:mm:ss[+|-]hh:mm' '0'. "#EC NOTEXT
+  _set_help_string '15' '3' '2011-01-06T10:10:10+10:00' '0'. "#EC NOTEXT
+
+  "Set the language
+  _set_help_string '17' '1' 'Language'(082) '0'.            "#EC NOTEXT
+  _set_help_string '17' '2' sy-langu '0'.                   "#EC NOTEXT
+
+ENDMETHOD.
+
+
+method SET_MAPPING.
+ data mapping_rel type t_pod_relation.
+
+  if me->obj_doc_zip is initial.
+    " No document loaded... no chance to set mapping
+    exit.
+  endif.
+
+  " Check whether mapping is already defined
+  read table me->package_relations into mapping_rel with key type = if_fdt_xl_types=>mapping_namespace.
+
+  if mapping_rel is initial.
+    mapping_rel-id = 'sapMapping'.
+    mapping_rel-type = if_fdt_xl_types=>mapping_namespace.
+    mapping_rel-target = 'docProps/sapMapping.xml'.
+    append mapping_rel to me->package_relations.
+    me->store_package_relations( ).
+  endif.
+
+  " Set mapping (overwrite if existing)
+  me->if_fdt_doc_pkg~set_xstring_as_file( abs_filename = mapping_rel-target  x_file = mapping->to_xml_xstring( ) ).
+endmethod.
+
+
+method SET_NAMED_CELL_VALUE.
+
+  data:
+         xsheet            type xstring,
+         named_cell        like line of me->named_cells,
+         xml_doc           type ref to if_ixml_document.
+
+* Enabling iXML support
+  type-pools: ixml.
+  class cl_ixml definition load.
+
+
+  if me->named_cells is initial.
+    me->load_defined_names( ).
+    if  me->named_cells is initial.
+      " Giving up
+      exit.
+    endif.
+  endif.
+
+  read table me->named_cells into named_cell with key name = cell_name.
+  if named_cell is initial.
+    " Named cell does not exist
+    exit.
+  endif.
+
+  xsheet = me->get_worksheet_by_name( named_cell-sheet_name ).
+
+* Parse XML sheet
+  xml_doc = me->parse_xml( xsheet ).
+  if xml_doc is initial.
+    exit.
+  endif.
+
+******  TEST FOR FORAMTS
+  if named_cell-format = 'General' or named_cell-format = 'yyyy\-mm\-dd'.
+    data value_ref type ref to data.
+    get reference of cell_value into value_ref.
+  else.
+    data cell_value_num type i.
+    cell_value_num = cell_value.
+    get reference of cell_value_num into value_ref.
+  endif.
+******  TEST FOR FORAMTS
+
+
+
+  me->set_cell_value_by_xmldoc(
+    exporting
+      value           = value_ref
+      cell_coordinate = named_cell-cell
+    changing
+      xml_doc = xml_doc
+  ).
+
+  me->overwrite_worksheet_by_name( worksheet_name = named_cell-sheet_name xsheet = me->render_xml( xml_doc ) ).
+
+endmethod.
+
+
+method SET_NAMED_RANGE_VALUES.
+  data:
+         xsheet            type xstring,
+         named_range       like line of me->named_ranges,
+         xml_doc           type ref to if_ixml_document,
+         itab_row          type ref to data,
+         itab_columns      type i,
+         itab_rows         type i,
+         range_columns     type i,
+         range_rows        type i,
+         range_start_row   type i,
+         range_end_row     type i,
+         range_start_col   type i,
+         range_end_col     type i,
+         columns_descr     type ref to cl_abap_structdescr,
+         columns_tab       type abap_component_tab,
+         current_col       type i.
+
+
+  field-symbols:
+                  <itab>       type standard table,
+                  <itab_row>   type any,
+                  <itab_cell>  type any.
+* Enabling iXML support
+  type-pools: ixml.
+  class cl_ixml definition load.
+
+  if itab is initial.
+    " No data, nothing to do...
+    exit.
+  endif.
+
+  if me->named_ranges is initial.
+    me->load_defined_names( ).
+    if  me->named_ranges is initial.
+      " Named ranges could not be read... giving up
+      exit.
+    endif.
+  endif.
+
+  read table me->named_ranges into named_range with key name = range_name.
+  if named_range is initial.
+    " Named range does not exist in document
+    exit.
+  endif.
+
+  get_col_and_row_from_a1_style(
+    exporting coordinate = named_range-start_cell
+    importing column_number = range_start_col
+      row_number    = range_start_row  ).
+
+  get_col_and_row_from_a1_style(
+    exporting coordinate = named_range-end_cell
+    importing column_number = range_end_col
+      row_number    = range_end_row  ).
+
+  range_columns = ( range_end_col - range_start_col ) + 1.
+  range_rows = ( range_end_row - range_start_row ) + 1.
+
+* Parse XML sheet
+  xsheet = me->get_worksheet_by_name( named_range-sheet_name ).
+  xml_doc = me->parse_xml( xsheet ).
+  if xml_doc is initial. exit. endif.
+
+  " Calculate whether the itab fit in the named range
+
+* Prepare field symbols and getting table info
+  assign itab->* to <itab>.
+  create data itab_row like line of <itab>.
+  assign itab_row->* to <itab_row>.
+  describe table <itab> lines itab_rows.
+  try.
+      columns_descr ?= cl_abap_typedescr=>describe_by_data( <itab_row> ).
+      columns_tab = columns_descr->get_components( ). "#EC CI_BOX_OK
+      describe table columns_tab lines itab_columns.
+    catch cx_root.
+      exit.
+  endtry.
+
+  if itab_columns = range_columns and itab_rows = range_rows.
+    " Fits, let's start
+    loop at <itab> into <itab_row>.
+      current_col = range_start_col.
+      do itab_columns times.
+        assign component sy-index of structure <itab_row> to <itab_cell>. "#EC CI_BOX_OK
+
+        data itab_cell type ref to data.
+
+        get reference of <itab_cell> into itab_cell.
+
+        me->set_cell_value_by_xmldoc(
+          exporting
+            value           = itab_cell
+            cell_coordinate = convert_i_to_column( current_col ) && range_start_row
+          changing
+            xml_doc         = xml_doc ).
+        current_col = current_col + 1.
+      enddo.
+      range_start_row = range_start_row + 1.
+    endloop.
+  endif.
+
+  me->overwrite_worksheet_by_name( worksheet_name = named_range-sheet_name xsheet = me->render_xml( xml_doc ) ).
+
+endmethod.
+
+
+METHOD set_shared_strings.
+  DATA:
+        rel_s_str TYPE t_pod_relation,
+        x_file  TYPE xstring,
+        xml_doc       TYPE REF TO if_ixml_document,
+        sst_element   TYPE REF TO if_ixml_element,
+        si_element    TYPE REF TO if_ixml_element,
+        t_element     TYPE REF TO if_ixml_element,
+        t_text        TYPE REF TO if_ixml_text,
+        str           TYPE string,
+        count         TYPE string.
+
+* Enabling iXML support
+  TYPE-POOLS: ixml.
+  CLASS cl_ixml DEFINITION LOAD.
+
+  IF shared_strings IS SUPPLIED. "Else write what is already there in mt_shared_strings
+*   Storing shared_strings table in object
+    CLEAR me->mt_shared_strings.
+    me->mt_shared_strings = shared_strings. "Anbu"Ideally there shouldn't be any usecase for this after performance optimization changes
+  ENDIF.
+
+* Check whether workbook relations are loaded
+  IF workbook_relations IS INITIAL.
+    EXIT.
+  ENDIF.
+
+* Find shared strings location
+  READ TABLE me->workbook_relations WITH KEY type = if_fdt_xl_types=>ooxml_relationship_shrdstr INTO rel_s_str.
+  IF rel_s_str-target IS INITIAL.
+    EXIT.
+  ENDIF.
+
+* Get number of lines
+  DESCRIBE TABLE mt_shared_strings LINES count.
+  cl_abap_string_utilities=>del_trailing_blanks( CHANGING str = count ).
+
+* Create shared strings XML document
+  xml_doc = cl_ixml=>create( )->create_document( ).
+  sst_element = xml_doc->create_element_ns( 'sst' ).
+  sst_element->set_attribute( name = 'xmlns' value = if_fdt_xl_types=>ns_ooxml_ssheet_main  ).
+  sst_element->set_attribute( name = 'uniqueCount' value = count  ).
+  xml_doc->append_child( sst_element ).
+
+* Store strings
+  LOOP AT mt_shared_strings INTO str.
+    si_element = xml_doc->create_element_ns( 'si' ).
+    t_element =  xml_doc->create_element_ns( 't' ).
+    t_text = xml_doc->create_text( str ).
+    t_element->append_child( t_text ).
+    si_element->append_child( t_element ).
+    sst_element->append_child( si_element ).
+  ENDLOOP.
+
+* Render and store shared strings XML in document package
+  me->if_fdt_doc_pkg~set_xstring_as_file( abs_filename = workbook_folder && rel_s_str-target x_file = render_xml( xml_doc ) ).
+
+ENDMETHOD.
+
+
+  METHOD set_shared_string_buffer.
+* This method stores the shared strings only in mt_shared_strings (non sorted) so that it can be later updated to excel at one shot.
+* This is to improve performance. mth_shared_strings is a hashed table just to optimize the find operation instead of searching sequential in mt_shared_strings
+    DATA:          ls_shared_string_buffer      TYPE  ty_shared_string_buffer.
+    FIELD-SYMBOLS: <ls_shared_string_buffer>    TYPE  ty_shared_string_buffer.
+
+    IF me->mt_shared_strings IS INITIAL.
+      me->load_shared_strings( ).
+    ENDIF.
+
+    READ TABLE mth_shared_strings WITH TABLE KEY str_val = iv_shared_string ASSIGNING <ls_shared_string_buffer>.
+    IF sy-subrc = 0.
+      rv_cell_content_int = <ls_shared_string_buffer>-pos.
+    ELSE.
+      ls_shared_string_buffer-str_val = iv_shared_string.
+      APPEND iv_shared_string TO mt_shared_strings.
+      ls_shared_string_buffer-pos = sy-tabix - 1.
+      CONDENSE ls_shared_string_buffer-pos NO-GAPS.
+      INSERT ls_shared_string_buffer INTO TABLE mth_shared_strings.
+      rv_cell_content_int = ls_shared_string_buffer-pos.
+    ENDIF.
+  ENDMETHOD.
+
+
+METHOD set_worksheet_cols.
+  DATA:
+         worksheet_root_node     TYPE REF TO if_ixml_node,
+         worksheet_root_element  TYPE REF TO if_ixml_element,
+         cols_node               TYPE REF TO if_ixml_node,
+         cols_element            TYPE REF TO if_ixml_element,
+         col_node                TYPE REF TO if_ixml_node,
+         col_element             TYPE REF TO if_ixml_element,
+         col_collection          TYPE REF TO if_ixml_node_collection,
+         col_iterator            TYPE REF TO if_ixml_node_iterator,
+         sheetdata_node          TYPE REF TO if_ixml_node,
+         column                  LIKE LINE OF column_description_tab,
+         count                   TYPE string,
+         length                  TYPE string,
+         col_type_descr          TYPE REF TO cl_abap_typedescr.
+
+* Enabling iXML support
+  TYPE-POOLS: ixml.
+  CLASS cl_ixml DEFINITION LOAD.
+
+* Get the root node and element ( <worksheet> )
+  worksheet_root_node = sheet_xml_document->get_first_child( ).
+  worksheet_root_element ?= worksheet_root_node->query_interface( ixml_iid_element ).
+
+* Checking wether cols node exist
+  cols_node = worksheet_root_element->find_from_name( 'cols' ).
+  IF cols_node IS INITIAL.
+    sheetdata_node = worksheet_root_element->find_from_name( 'sheetData' ).
+    IF sheetdata_node IS INITIAL.
+      " At least <sheetData> tag must be present... giving up
+      EXIT.
+    ENDIF.
+    " Creating the cols entry
+    cols_node ?= sheet_xml_document->create_element_ns( 'cols' ).
+    worksheet_root_node->insert_child( new_child = cols_node ref_child = sheetdata_node ).
+  ELSE.
+    " Removing childs from <cols>
+    cols_element ?= cols_node->query_interface( ixml_iid_element ).
+    col_collection = cols_element->get_elements_by_tag_name( 'col' ).
+    col_iterator = col_collection->create_iterator( ).
+    col_node = col_iterator->get_next( ).
+    WHILE col_node IS NOT INITIAL.
+      col_node->remove_node( ).
+      col_node = col_iterator->get_next( ).
+    ENDWHILE.
+  ENDIF.
+
+  FREE: col_node, col_element.
+
+  " Creating new <col> tags from ABAP component tab
+  LOOP AT column_description_tab INTO column.
+    count = sy-tabix.
+    cl_abap_string_utilities=>del_trailing_blanks( CHANGING str = count ).
+    length = '30'. " default length
+    col_element = sheet_xml_document->create_element_ns( 'col' ).
+    col_element->set_attribute_ns( name = 'min' value = count ).
+    col_element->set_attribute_ns( name = 'max' value = count ).
+    TRY.
+        col_type_descr ?= column-type.
+*        length = col_type_descr->length * '1.3' .
+        length = col_type_descr->length.
+        IF length > 40 AND iv_call_type EQ if_fdt_doc_spreadsheet=>gc_call_trace.  " Length of the Trace Excel columns set here
+          CASE count.
+            WHEN 1.
+              length = '80'.
+            WHEN OTHERS.
+              length = '20'.
+          ENDCASE.
+        ELSEIF length > 40 AND iv_call_type EQ if_fdt_doc_spreadsheet=>gc_call_message_area. "Length of the Msg Area Excel columns set here
+          CASE count.
+            WHEN 1.
+              length = '15'.
+            WHEN 2 OR 8 OR 7.
+              length = '35'.
+            WHEN 4.
+              length = '20'.
+            WHEN 5.
+              length = '65'.
+            WHEN 6.
+              length = '13'.
+            WHEN 11.
+              length = '70'.
+            WHEN OTHERS.
+              length = '25'.
+          ENDCASE.
+        ELSEIF iv_call_type EQ if_fdt_doc_spreadsheet=>gc_call_dec_table AND
+               iv_column_dectab EQ abap_true.
+          CASE count.
+            WHEN 1.
+              length = '30'.
+            WHEN 2.
+              length = '30'.
+            WHEN 3.
+              length = '14'.
+            WHEN 4 OR 5.
+              length = '35'.
+            WHEN 6.
+              length = '8'.
+            WHEN 7.
+              length = '10'.
+            WHEN 8.
+              length = '14'.
+            WHEN 9.
+              length = '15'.
+            WHEN 10 OR 11.
+              length = '15'.
+          ENDCASE.
+        ELSE.
+          length = '40'.
+        ENDIF.
+        cl_abap_string_utilities=>del_trailing_blanks( CHANGING str = length ).
+        col_element->set_attribute_ns( name = 'width' value = length ).
+      CATCH cx_root.
+        col_element->set_attribute_ns( name = 'width' value = length ).
+    ENDTRY.
+    IF is_alv_document = abap_true.
+      col_element->set_attribute_ns( name = 's' value = '2' ).
+    ENDIF.
+    col_element->set_attribute_ns( name = 'bestFit' value = '1' ).
+    cols_node->append_child( col_element ).
+  ENDLOOP.
+ENDMETHOD.
+
+
+method SET_WORKSHEET_DIMENSION.
+
+  data:
+        worksheet_node    type ref to if_ixml_node,
+        worksheet_element type ref to if_ixml_element,
+        dimension_node    type ref to if_ixml_node,
+        dimension_element type ref to if_ixml_element,
+        dimension_attr    type ref to if_ixml_attribute.
+
+* Enabling iXML support
+  type-pools: ixml.
+  class cl_ixml definition load.
+
+* Get the root node and element ( <worksheet> )
+  worksheet_node = sheet_xml_document->get_first_child( ).
+  worksheet_element ?= worksheet_node->query_interface( ixml_iid_element ).
+
+  dimension_element = worksheet_element->find_from_name( 'dimension' ).
+
+  if dimension_element is not initial.
+    dimension_element->set_attribute_ns( name = 'ref' value = dimension ).
+  endif.
+endmethod.
+
+
+METHOD set_worksheet_formatpr.
+  DATA:
+        worksheet_node    TYPE REF TO if_ixml_node,
+        worksheet_element TYPE REF TO if_ixml_element,
+        format_element TYPE REF TO if_ixml_element.
+
+* Enabling iXML support
+  TYPE-POOLS: ixml.
+  CLASS cl_ixml DEFINITION LOAD.
+
+* Get the root node and element ( <worksheet> )
+  worksheet_node = sheet_xml_document->get_first_child( ).
+  worksheet_element ?= worksheet_node->query_interface( ixml_iid_element ).
+
+  format_element = worksheet_element->find_from_name( 'sheetFormatPr' ).
+
+  IF format_element IS NOT INITIAL.
+    format_element->set_attribute_ns( name = 'outlineLevelRow' value = outlinelevel ).
+  ENDIF.
+
+ENDMETHOD.
+
+
+METHOD set_worksheet_sheetdata.
+
+  DATA: itab_row          TYPE REF TO data,
+        columns_descr     TYPE REF TO cl_abap_structdescr,
+        t_col             TYPE abap_component_tab,
+        s_col             LIKE LINE OF t_col,
+        column            TYPE if_fdt_doc_spreadsheet=>s_column,
+        col_count         TYPE i,
+        rows              TYPE i,
+        dimension         TYPE string,
+        lv_group          TYPE int4,
+        lv_max_group      TYPE int4,
+        lv_max_group_string TYPE string,
+        sheetdata_node TYPE REF TO if_ixml_node,
+        row_element    TYPE REF TO if_ixml_element,  " <row>
+        row_count      TYPE int4,                    " Row count as string
+        lv_row_number TYPE int4.
+
+  FIELD-SYMBOLS: <itab>        TYPE STANDARD TABLE,
+                 <itab_row>    TYPE any,
+                 <itab_row1>    TYPE any.
+
+* Enabling iXML support
+  TYPE-POOLS: ixml.
+  CLASS cl_ixml DEFINITION LOAD.
+
+  IF itab IS NOT INITIAL.
+* Prepare field symbols and getting table info
+    ASSIGN itab->* TO <itab>.
+    CREATE DATA itab_row LIKE LINE OF <itab>.
+    ASSIGN itab_row->* TO <itab_row>.
+*    CREATE DATA itab_row1 LIKE LINE OF <itab>.
+*    ASSIGN itab_row1->* TO <itab_row1>.
+    DESCRIBE TABLE <itab> LINES rows.
+    rows = rows + 1. " One row more in the spreadsheet for the column headings
+    IF columns IS NOT INITIAL.
+      LOOP AT columns INTO column.
+        IF column-display_name IS NOT INITIAL.
+          s_col-name = column-display_name.
+        ELSE.
+          s_col-name = column-name.
+        ENDIF.
+        s_col-type = column-type.
+        APPEND s_col TO t_col.
+      ENDLOOP.
+    ELSE."If columns are not yet defined
+      TRY.
+          columns_descr ?= cl_abap_typedescr=>describe_by_data( <itab_row> ).
+          t_col = columns_descr->get_components( ).      "#EC CI_BOX_OK
+        CATCH cx_root.
+          EXIT.
+      ENDTRY.
+    ENDIF.
+    DESCRIBE TABLE t_col LINES col_count.
+  ELSE.
+* No data, leaving...
+    EXIT.
+  ENDIF.
+
+* Prepare XML
+  TRY.
+      dimension = 'A1:' && me->convert_i_to_column( col_count ) && rows.
+      me->set_worksheet_dimension( sheet_xml_document = sheet_xml_document dimension = dimension ).
+      me->set_worksheet_cols( sheet_xml_document = sheet_xml_document
+                              column_description_tab = t_col
+                              is_alv_document = is_alv_document
+                              iv_call_type = iv_call_type
+                              iv_column_dectab = iv_column_dectab ).
+
+      sheetdata_node = me->clear_worksheet_sheetdata( sheet_xml_document ).
+    CATCH cx_root.
+      EXIT.
+  ENDTRY.
+
+  IF sheetdata_node IS INITIAL.
+    EXIT.
+  ENDIF.
+
+* Set column headings
+  row_element = sheet_xml_document->create_element_ns( 'row' ).
+  row_element->set_attribute_ns( name = 'r' value = '1' ).
+  row_element->set_attribute_ns( name = 'spans' value = '1:' && col_count ).
+  row_element->set_attribute_ns( name = 's' value = '1' ). " Bold
+  row_element->set_attribute_ns( name = 'customFormat' value = '1' ).
+
+  create_cell_elements_header( io_row_element        = row_element
+                               it_column             = columns
+                               it_column_description = t_col
+                               io_sheet_xml_document = sheet_xml_document
+                               iv_call_type          = iv_call_type
+                               iv_is_alv_document    = is_alv_document ).
+  sheetdata_node->append_child( row_element ).
+
+* Create spreadsheet
+  lv_row_number = 2.
+  LOOP AT <itab> INTO <itab_row>.
+    row_count = sy-tabix + 1.
+
+    IF iv_call_type NE if_fdt_doc_spreadsheet=>gc_call_new_lean_trace.
+      create_worksheet_row( EXPORTING is_row                = <itab_row>
+                                      iv_row_number         = row_count
+                                      it_column             = columns
+                                      it_column_description = t_col
+                                      io_sheet_xml_document = sheet_xml_document
+                                      io_sheet_data_node     = sheetdata_node
+                                      iv_call_type          = iv_call_type
+                                      iv_is_alv_document    = is_alv_document
+                             CHANGING cv_group_number       = lv_group
+                                      cv_group_number_max   = lv_max_group ).
+    ELSE.
+      create_worksheet_row_ntl( EXPORTING it_data               = <itab>
+                                          is_row                = <itab_row>
+                                          iv_row_index          = ( row_count - 1 )
+                                          it_column             = columns
+                                          it_column_description = t_col
+                                          io_sheet_xml_document = sheet_xml_document
+                                          io_sheet_data_node    = sheetdata_node
+                                          iv_is_alv_document    = is_alv_document
+                                 CHANGING cv_row_number         = lv_row_number
+                                          cv_group_number_max   = lv_max_group ).
+    ENDIF.
+  ENDLOOP.
+
+  IF iv_call_type EQ if_fdt_doc_spreadsheet=>gc_call_trace
+     OR iv_call_type EQ if_fdt_doc_spreadsheet=>gc_call_new_lean_trace.
+    lv_max_group_string = lv_max_group.
+    set_worksheet_formatpr( sheet_xml_document = sheet_xml_document outlinelevel = lv_max_group_string ).
+  ENDIF.
+
+ENDMETHOD.
+
+
+METHOD set_worksheet_wraptext.
+  DATA:
+        worksheet_node    TYPE REF TO if_ixml_node,
+        worksheet_element TYPE REF TO if_ixml_element,
+        format_element    TYPE REF TO if_ixml_element,
+        lo_sheet          TYPE REF TO if_ixml_element.
+
+
+* Enabling iXML support
+  TYPE-POOLS: ixml.
+  CLASS cl_ixml DEFINITION LOAD.
+
+* Get the root node and element ( <worksheet> )
+  worksheet_node = sheet_xml_document->get_first_child( ).
+  DATA: lv_name TYPE string.
+  lv_name = worksheet_node->get_name( ).
+  worksheet_element ?= worksheet_node->query_interface( ixml_iid_element ).
+  format_element = worksheet_element->find_from_name( 'sheetView' ).
+  lo_sheet = sheet_xml_document->create_element_ns( 'selection' ).
+  lo_sheet->set_attribute_ns( name = 'activeCell' value = 'E1' ).
+  lo_sheet->set_attribute_ns( name = 'sqref' value = 'E1:E1048576' ).
+  format_element->append_child( lo_sheet ).
+
+  "<pageSetup paperSize="9" orientation="portrait" r:id="rId1" />
+  lo_sheet = sheet_xml_document->create_element_ns( 'pageSetup' ).
+  lo_sheet->set_attribute_ns( name = 'paperSize' value = '9' ).
+  lo_sheet->set_attribute_ns( name = 'orientation' value = 'portrait' ).
+  lo_sheet->set_attribute_ns( name = 'r:id' value = 'rId1' ).
+  worksheet_node->append_child( lo_sheet ).
+
+ENDMETHOD.
+
+
+method STORE_WORKBOOK_RELATIONS.
+  data: lv_file type xstring.
+
+  check me->obj_doc_zip is not initial.
+
+  if me->workbook_folder is initial or me->workbook_filename is initial.
+    me->load_workbook( ).
+    if me->workbook_folder is initial or me->workbook_filename is initial.
+      "Leaving as they are still initial
+      exit.
+    endif.
+  endif.
+
+  call transformation fdt_xl_set_relations
+      source relations = me->workbook_relations
+      result xml lv_file.
+
+  me->if_fdt_doc_pkg~set_xstring_as_file( abs_filename = workbook_folder && gc_rels_path && workbook_filename && gc_rels_extn  x_file =  lv_file ).
+endmethod.
+ENDCLASS.
